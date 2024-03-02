@@ -11,13 +11,152 @@
 #define FTP_COMMAND_PORT 20
 
 //For testing:
-// $ gcc main.c -o main.exe &&  ./main.exe ftp://ftp.up.pt/pub/
+// make
+// ./main ftp://ftp.up.pt/pub/debian/README.html
 
 /*
 The authors (Filip and Valentino) certify that this work is a creation of theirs
 The estabilishment of the connection was built based on the Beej's Guide to Network 
 Programming as well as the available files on moodle.
 */
+
+/**
+ * @brief Get the server addr object
+ * 
+ * @param ip_address 
+ * @param data_port 
+ * @return struct sockaddr_in 
+ */
+struct sockaddr_in get_server_addr(const char* ip_address, int data_port) {
+    struct sockaddr_in server_addr;
+    bzero((char*)&server_addr, sizeof(server_addr));
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_addr.s_addr = inet_addr(ip_address);  // 32 bit Internet address network byte ordered
+    server_addr.sin_port = htons(data_port);  
+
+    return server_addr;
+}
+
+/**
+ * @brief send command to ftp server
+ * 
+ * @param sockfd socket file descriptor
+ * @param command command to send
+ */
+char* send_command(int sockfd, const char *command) {
+    char *buffer = (char *)malloc(MAX_CHAR_SIZE);
+    if (buffer == NULL) {
+        perror("malloc()");
+        exit(EXIT_FAILURE);
+    }
+
+    int bytes_sent = write(sockfd, command, strlen(command));
+    if (bytes_sent < 0) {
+        perror("write()");
+        free(buffer); 
+        exit(EXIT_FAILURE);
+    }
+
+    printf("Sent %d bytes: %s\n", bytes_sent, command);
+
+    
+    int bytes_received = recv(sockfd, buffer, MAX_CHAR_SIZE - 1, 0);
+    if (bytes_received < 0) {
+        perror("recv()");
+        free(buffer); 
+        exit(EXIT_FAILURE);
+    }
+
+    buffer[bytes_received] = '\0'; // Ensure null-termination
+
+    printf("Response from ftp server: %s\n", buffer);
+
+    return buffer;
+}
+
+/**
+ * @brief Initialize connection and get first response
+ * 
+ * @param sockfd 
+ */
+void initialize_connection(int sockfd) {
+    char *buffer[MAX_CHAR_SIZE];
+    int bytes_received;
+    char *command = "Hello server\r\n";
+
+    int bytes_sent = write(sockfd, command, strlen(command));
+    if (bytes_sent < 0) {
+        perror("write()");
+        exit(EXIT_FAILURE);
+    }
+
+    printf("Sent %d bytes: %s\n", bytes_sent, command);
+
+    // Wait till message
+    while(!strstr(buffer, "530 Please login with USER and PASS")) {
+        bytes_received = recv(sockfd, buffer, MAX_CHAR_SIZE - 1, 0); // Receive message
+        buffer[bytes_received] = '\0'; // Null-termination
+        if (bytes_received < 0) {
+            perror("recv()");
+            exit(EXIT_FAILURE);
+        }
+    }
+
+    printf("Response from ftp server:\n %s\n", buffer);
+}
+
+/**
+ * @brief Get the new port object from
+ *     < 227 Entering Passive Mode (x1,x2,x3,x4,x5,x6)
+ * 
+ * @param msg recived message
+ * @return int 
+ */
+void get_new_port(const char *response, char *ip_address, int *port_number) {
+    // Finding '(' and ')'
+    const char *openParen = strchr(response, '(');
+    const char *closeParen = strchr(response, ')');
+
+    if (openParen == NULL || closeParen == NULL) {
+        fprintf(stderr, "parsing failed, wrong format!\n");
+        exit(-1);
+    }
+
+    char numbers[MAX_CHAR_SIZE];
+    strncpy(numbers, openParen + 1, closeParen - openParen - 1);
+    numbers[closeParen - openParen - 1] = '\0'; // add at the end
+
+    // Extract numbers
+    int x1, x2, x3, x4, x5, x6;
+        sscanf(numbers, "%d,%d,%d,%d,%d,%d", &x1, &x2, &x3, &x4, &x5, &x6);
+        
+    /* TODO check code x1 == 227 */
+
+    // Calculate IP address
+    sprintf(ip_address, "%d.%d.%d.%d", x1, x2, x3, x4);
+        
+    // Calculate port number
+    *port_number = x5 * 256 + x6;
+}
+
+/**
+ * @brief listen for the data from server
+ * 
+ * @param sockfd 
+ */
+void receive_data(int sockfd) {
+    char buffer[MAX_CHAR_SIZE];
+    int bytes_received;
+
+    // Receive data
+    while ((bytes_received = recv(sockfd, buffer, MAX_CHAR_SIZE, 0)) > 0) {
+        fwrite(buffer, 1, bytes_received, stdout);
+    }
+    if (bytes_received == -1) {
+        perror("Error receiving data");
+    }
+
+}
 
 int main(int argc, char *argv[]) {
     printf("\033[0;32mFTP DOWNLOAD APPLICATION BY Filip and Valentino. FEUP 2024");
@@ -135,49 +274,85 @@ int main(int argc, char *argv[]) {
         exit(-1);
     }
 
-    printf("URL Resolved: %s", inet_ntoa(*((struct in_addr *)h->h_addr)));
+    char *url_resolved = inet_ntoa(*((struct in_addr *)h->h_addr));
+    printf("URL Resolved: %s\n", url_resolved);
 
-    //Now we try to open 2 TCP connection, one for Control and other for data.
+    // Server address handling
+    struct sockaddr_in server_addr_ctrl = get_server_addr(url_resolved, FTP_DATA_PORT);
 
-    //Creating a stuct for the address:
-    struct sockaddr_in address_ctrl;
-    memset(&address_ctrl,0, sizeof(address_ctrl)); //Zeroing the struct
+    // Open a TCP socket
+    int socked_id_ctrl = socket(AF_INET, SOCK_STREAM, 0);
 
-    address_ctrl.sin_family = AF_INET; //IPv4
-    address_ctrl.sin_addr.s_addr = inet_addr(host); 
-    address_ctrl.sin_port = htons(FTP_COMMAND_PORT);
-
-    struct sockaddr_in address_data;
-    memset(&address_data,0, sizeof(address_data)); //Zeroing the struct
-
-    address_data.sin_family = AF_INET; //IPv4
-    address_data.sin_addr.s_addr = inet_addr(host); 
-    address_data.sin_port = htons(FTP_COMMAND_PORT);
-
-    //Opening the sockets
-    int socket_id_ctrl = socket(AF_INET, SOCK_STREAM, 0);
-    int socket_id_data = socket(AF_INET, SOCK_STREAM, 0);
-
-
-    if (!socket_id_ctrl || !socket_id_data) {
-        printf("Kernel does not want you to have a socket :(");
+    if (socked_id_ctrl < 0) {
+        perror("socket()");
         exit(-1);
     }
 
-    //Now we use the socket to connect to server
-    int connection_ctrl = connect(socket_id_ctrl, (struct sockaddr *)&address_ctrl, sizeof(address_ctrl));
-    int connection_data = connect(socket_id_data, (struct sockaddr *)&address_data, sizeof(address_data));
-
-    if (!connection_ctrl || !connection_data){
-        printf("Host unreachable");
-        exit(-1); 
+    // Connect to the server
+    fprintf(stderr, "connesting...\n");
+    if (connect(socked_id_ctrl, (struct sockaddr *)&server_addr_ctrl, sizeof(server_addr_ctrl)) < 0) {
+        perror("connect()");
+        exit(-1);
     }
 
-    printf("\nConnetion estabilished. Sockets for Control|Data: %d|%d.", socket_id_ctrl, socket_id_data);
+    // Establish a connection for controling
+    initialize_connection(socked_id_ctrl);
 
-    //Now the rest...
+    // Login
+    send_command(socked_id_ctrl, "user anonymous\r\n");
+    send_command(socked_id_ctrl, "pass  \r\n");
 
-    return 0;
+    // Ask for passive mode and get response
+    char *response = "";
+    response = send_command(socked_id_ctrl, "pasv\r\n");
+
+    /* Calculate new port port = x5*256 + x6.*/
+    int new_port = 0;
+    get_new_port(response, url_resolved, &new_port);
+
+    /* Establish a connestion for receiving data*/
+    struct sockaddr_in server_addr_data = get_server_addr(url_resolved, new_port);
+
+    int socked_id_data = socket(AF_INET, SOCK_STREAM, 0);
+
+    if (socked_id_data < 0) {
+        perror("socket()");
+        exit(-1);
+    }
+
+    if (connect(socked_id_data, (struct sockaddr *)&server_addr_data, sizeof(server_addr_data)) < 0) {
+        perror("connect()");
+        exit(-1);
+    }   
+
+    // Receive file
+    FILE *file;
+    char filename[MAX_CHAR_SIZE]; // Command to download the file
+    sprintf(filename, "RETR %s\n", url_path);
+
+    send_command(socked_id_ctrl, filename);
+
+    // Save received file
+    // file = fopen("received_file.txt", "wb");
+    // if (file = NULL) {
+    //     perror("Error opening file");
+    //     exit(-1);
+    // }
+
+    receive_data(socked_id_data);
+
+    // fclose(file);
+
+    send_command(socked_id_ctrl, "quit\r\n");
+
+
+    // Close socket
+    if (close(socked_id_ctrl) < 0 || close(socked_id_data) < 0) {
+        perror("close()");
+        exit(-1);
+    }
+
+    return 0;   
 }
 
 /*
