@@ -158,6 +158,24 @@ void receive_data(int sockfd) {
 
 }
 
+/**
+ * @brief Close connection to the server
+ * 
+ * @param socked_id_ctrl 
+ * @param socked_id_data 
+ * @return int 
+ */
+int close_connection(int socked_id_ctrl, int socked_id_data) {
+    send_command(socked_id_ctrl, "quit\r\n");
+
+    // Close socket
+    if (close(socked_id_ctrl) < 0 || close(socked_id_data) < 0) {
+        perror("close()");
+        exit(-1);
+    }
+    return 0;
+}
+
 int main(int argc, char *argv[]) {
     printf("\033[0;32mFTP DOWNLOAD APPLICATION BY Filip and Valentino. FEUP 2024");
     printf("\033[0;37m\n");
@@ -165,7 +183,7 @@ int main(int argc, char *argv[]) {
     //Parsing of the URL
 
     char url [MAX_CHAR_SIZE] ;
-    char user [MAX_CHAR_SIZE];
+    char user [MAX_CHAR_SIZE] = "anonymous";
     char password [MAX_CHAR_SIZE];
     char host [MAX_CHAR_SIZE];
     char url_path [MAX_CHAR_SIZE];
@@ -298,9 +316,17 @@ int main(int argc, char *argv[]) {
     // Establish a connection for controling
     initialize_connection(socked_id_ctrl);
 
-    // Login
-    send_command(socked_id_ctrl, "user anonymous\r\n");
-    send_command(socked_id_ctrl, "pass  \r\n");
+    /* Login */
+    // username
+    char login_command[MAX_CHAR_SIZE];
+    sprintf(login_command, "user %s\r\n", user);
+    send_command(socked_id_ctrl, login_command); 
+    
+    // password
+    char password_command[MAX_CHAR_SIZE];
+
+    sprintf(password_command, "pass %s\r\n", password);
+    send_command(socked_id_ctrl, password_command);
 
     // Ask for passive mode and get response
     char *response = "";
@@ -329,8 +355,14 @@ int main(int argc, char *argv[]) {
     FILE *file;
     char filename[MAX_CHAR_SIZE]; // Command to download the file
     sprintf(filename, "RETR %s\n", url_path);
+    response = send_command(socked_id_ctrl, filename);
 
-    send_command(socked_id_ctrl, filename);
+    // Check for faillure
+    if(strstr(response, "550 Failed to open file")) {
+        fprintf(stderr, "[Error] Failed to open file!\n");
+        close_connection(socked_id_ctrl, socked_id_data);
+        exit(-1);
+    }
 
     // Save received file
     // file = fopen("received_file.txt", "wb");
@@ -343,14 +375,7 @@ int main(int argc, char *argv[]) {
 
     // fclose(file);
 
-    send_command(socked_id_ctrl, "quit\r\n");
-
-
-    // Close socket
-    if (close(socked_id_ctrl) < 0 || close(socked_id_data) < 0) {
-        perror("close()");
-        exit(-1);
-    }
+    close_connection(socked_id_ctrl, socked_id_data);
 
     return 0;   
 }
