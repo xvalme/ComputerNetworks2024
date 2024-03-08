@@ -69,7 +69,7 @@ char* send_command(int sockfd, const char *command) {
 
     buffer[bytes_received] = '\0'; // Ensure null-termination
 
-    //printf("Response from ftp server: %s\n", buffer);
+    // printf("Response from ftp server: %s\n", buffer);
     printf("Received %d bytes. \n", bytes_received);
 
     return buffer;
@@ -144,20 +144,21 @@ void get_new_port(const char *response, char *ip_address, int *port_number) {
  * @brief listen for the data from server
  * 
  * @param sockfd 
+ * @param file 
  */
-void receive_data(int sockfd) {
-    char buffer[MAX_CHAR_SIZE];
+void receive_data(int sockfd, FILE *file) {
+    char *buffer = (char *)malloc(MAX_CHAR_SIZE);
     int bytes_received;
 
     // Receive data
     while ((bytes_received = recv(sockfd, buffer, MAX_CHAR_SIZE, 0)) > 0) {
-        // TO DO.
-        fwrite(buffer, 1, bytes_received, stdout);
+        // fwrite(buffer, 1, bytes_received, stdout);
+        fwrite(buffer, 1, bytes_received, file);
     }
+
     if (bytes_received == -1) {
         perror("Error receiving data");
     }
-
 }
 
 /**
@@ -226,7 +227,7 @@ int main(int argc, char *argv[]) {
         char *token = strtok(temp, ":");
         
         if (!token) {
-            printf("Invalid URL. Format: ftp://[<user>:<password>@]<host>/<url-path> ");
+            printf("Invalid URL. Format: ftp://[<user>:<password>@]<host>/<url-path> \n");
             exit(-1);
         }
 
@@ -236,7 +237,7 @@ int main(int argc, char *argv[]) {
         token = strtok( rest , "@");
 
         if (!rest) {
-            printf("Invalid URL. Format: ftp://[<user>:<password>@]<host>/<url-path> ");
+            printf("Invalid URL. Format: ftp://[<user>:<password>@]<host>/<url-path> \n");
             exit(-1);
         }
 
@@ -245,14 +246,14 @@ int main(int argc, char *argv[]) {
         rest = strtok(NULL, "");
 
         if (!rest) {
-            printf("Invalid URL. Format: ftp://[<user>:<password>@]<host>/<url-path> ");
+            printf("Invalid URL. Format: ftp://[<user>:<password>@]<host>/<url-path> \n");
             exit(-1);
         }
 
         strcpy(url, rest);
 
         if (!strlen(user) || !strlen(password) || !strlen(url)){
-            printf("Invalid URL. Format: ftp://[<user>:<password>@]<host>/<url-path> ");
+            printf("Invalid URL. Format: ftp://[<user>:<password>@]<host>/<url-path> \n");
             exit(-1);
         }
 
@@ -274,7 +275,7 @@ int main(int argc, char *argv[]) {
     token = strtok(NULL,"");
 
     if (!token) {
-            printf("Invalid URL. Format: ftp://[<user>:<password>@]<host>/<url-path> ");
+            printf("Invalid URL. Format: ftp://[<user>:<password>@]<host>/<url-path> \n");
             exit(-1);
     }
 
@@ -320,10 +321,11 @@ int main(int argc, char *argv[]) {
 
     /* Login */
     // username
+    char *response = "";
     char login_command[MAX_CHAR_SIZE];
     sprintf(login_command, "user %s\r\n", user);
-    send_command(socked_id_ctrl, login_command); 
-    
+    response = send_command(socked_id_ctrl, login_command); 
+
     // password
     char password_command[MAX_CHAR_SIZE];
 
@@ -331,11 +333,10 @@ int main(int argc, char *argv[]) {
     send_command(socked_id_ctrl, password_command);
 
     // Ask for passive mode and get response
-    char *response = "";
     response = send_command(socked_id_ctrl, "pasv\r\n");
 
-    if (strncmp(response, "530", 3) == 0) {
-        printf("Wrong username/password combination.");
+     if (strncmp(response, "530", 3) == 0) {
+        printf("Wrong username/password combination.\n");
         exit(-1);
     }
 
@@ -359,7 +360,6 @@ int main(int argc, char *argv[]) {
     }   
 
     // Receive file
-    FILE *file;
     char filename[MAX_CHAR_SIZE]; // Command to download the file
     sprintf(filename, "RETR %s\n", url_path);
     response = send_command(socked_id_ctrl, filename);
@@ -372,15 +372,20 @@ int main(int argc, char *argv[]) {
     }
 
     // Save received file
-    // file = fopen("received_file.txt", "wb");
-    // if (file = NULL) {
-    //     perror("Error opening file");
-    //     exit(-1);
-    // }
+    FILE *file;
+    char *received_file = strrchr(url_path, '/');
+    received_file++;
+    fprintf(stderr, "file : %s\n", received_file);
 
-    receive_data(socked_id_data);
+    file = fopen(received_file, "wb");
+    if (file == NULL) {
+        perror("Error opening file");
+        exit(-1);
+    }
 
-    // fclose(file);
+    receive_data(socked_id_data, file);
+
+    fclose(file);
 
     close_connection(socked_id_ctrl, socked_id_data);
 
