@@ -15,7 +15,7 @@
 // ./main ftp://ftp.up.pt/pub/debian/README.html
 
 /*
-The authors (Filip and Valentino) certify that this work is a creation of theirs
+The authors (Filip and Valentino) certify that this work is a creation of theirs.
 The estabilishment of the connection was built based on the Beej's Guide to Network 
 Programming as well as the available files on moodle.
 */
@@ -69,7 +69,8 @@ char* send_command(int sockfd, const char *command) {
 
     buffer[bytes_received] = '\0'; // Ensure null-termination
 
-    printf("Response from ftp server: %s\n", buffer);
+    //printf("Response from ftp server: %s\n", buffer);
+    printf("Received %d bytes. \n", bytes_received);
 
     return buffer;
 }
@@ -102,7 +103,7 @@ void initialize_connection(int sockfd) {
         }
     }
 
-    printf("Response from ftp server:\n %s\n", buffer);
+    //printf("Response from ftp server:\n %s\n", buffer);
 }
 
 /**
@@ -150,6 +151,7 @@ void receive_data(int sockfd) {
 
     // Receive data
     while ((bytes_received = recv(sockfd, buffer, MAX_CHAR_SIZE, 0)) > 0) {
+        // TO DO.
         fwrite(buffer, 1, bytes_received, stdout);
     }
     if (bytes_received == -1) {
@@ -307,7 +309,7 @@ int main(int argc, char *argv[]) {
     }
 
     // Connect to the server
-    fprintf(stderr, "connesting...\n");
+    fprintf(stderr, "Connecting...\n");
     if (connect(socked_id_ctrl, (struct sockaddr *)&server_addr_ctrl, sizeof(server_addr_ctrl)) < 0) {
         perror("connect()");
         exit(-1);
@@ -331,6 +333,11 @@ int main(int argc, char *argv[]) {
     // Ask for passive mode and get response
     char *response = "";
     response = send_command(socked_id_ctrl, "pasv\r\n");
+
+    if (strncmp(response, "530", 3) == 0) {
+        printf("Wrong username/password combination.");
+        exit(-1);
+    }
 
     /* Calculate new port port = x5*256 + x6.*/
     int new_port = 0;
