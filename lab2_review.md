@@ -45,13 +45,27 @@ On a ping from TUX3 to TUX2, on the other network, we see the following packets.
 On the interface eth0 from the TUX4, it is seen an ARP packet from 172.16.10.1 (TUX3, with the MAC ending with 2d:ef) requesting the MAC address from 172.16.10.254 (TUX4). The TUX4 then answerws this request stating that it´s MAC address is ....:2f:24. A few ms later, TUX4 does the same request, but to TUX3.
 On the interface eth1, we see a similar behaviour, but 172.16.11.253 (MAC ...:20:99), which is TUX4, asks for the MAC related to IP 172.16.11.1, which is TUX2, and then TUX2 answers back it´s MAC (..2e:c3). We see again this dialog, but starting with TUX2, and TUX4 answers back, a few milliseconds later.
 
-###What ICMP packets are observed and why?
+### What ICMP packets are observed and why?
 In the ping from TUX 3 to TUX 2, we see he ICMP packets going from 172.16.10.1 to 172.16.11.1. The IP header provides no information about the path the packet has to followm since this information is attached to the Ethernet hearder. Firstly, in eth0 (from tux4), we see the packet arriving with the destination MAC being the TUX4, and then this device acting as router sends the packet again to the wire using eth1, but now with the MAC address changed. So, the ICMP packets and their IP addresses do not bring the information on the IP layer of the path, but rather in the Ethernet field. This happens because we have a router in the middle connecting both networks. If we did not, we would see the ICMP packets with the MAC destination being the TUX2 itself, instead of the middle machine.
 
-###What are the IP and MAC addresses associated to ICMP packets and why?
+### What are the IP and MAC addresses associated to ICMP packets and why?
 Ping from TUX 3 to TUX 2. In eth0, we see:
 ICMP packet from 176.16.10.1 to 176.16.11.1 as request.
 The MAC from source is 2d:ef and it goes to 2f:24 (TUX 4).
 Later, in eth1 (other network), we see the same packet coming out:
 ICMP packet from 176.16.10.1 to 176.16.11.1 as request.
 The MAC from source is 2e:c3 (TUX4) and it goes to 20:99 (TUX2).
+The reason why we see the MAC address is due to the configured router in the middle of both networks, as we explained in the last question.
+
+## Experiment 4
+
+### How to configure a static route in a commercial router?
+In the case of the workbench router, we can simply use /ip route add dst-address=XXX.XXX.XXX.XXX/XX gateway=YYY.YYY.YYY.YYY to send everything that should go to dst-address to the machine with the gateway address.
+
+### What are the paths followed by the packets in the experiments carried out and why?
+
+
+### How to configure NAT in a commercial router?
+
+### What does NAT do?
+A NAT is meant to perform a network address translation, and the name suggests. This basically allows one to configure a network with the IPs he want and opening to the internet only one IP, from which the traffic is sent from/to the network. For instance, we can configure a network just as we did, with the diferent IPs, without conflicting with other networks that could be using the same IPs.
