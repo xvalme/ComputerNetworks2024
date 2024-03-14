@@ -363,12 +363,7 @@ int main(int argc, char *argv[]) {
         exit(-1);
     }   
 
-    // Receive file. First check for lenght.
-
-    char receive[MAX_CHAR_SIZE];
-    strcat(receive, "SIZE ");
-    strcat(receive, url_path);
-    //int size_char = send_command(socked_id_ctrl, receive);
+    // Receive file. 
 
     char filename[MAX_CHAR_SIZE]; // Command to download the file
     sprintf(filename, "RETR %s\n", url_path);
