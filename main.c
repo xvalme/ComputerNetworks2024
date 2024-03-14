@@ -6,7 +6,7 @@
 #include <netdb.h>
 #include <netinet/in.h>
 
-#define MAX_CHAR_SIZE 1024
+#define MAX_CHAR_SIZE 4096
 #define FTP_DATA_PORT 21
 #define FTP_COMMAND_PORT 20
 
@@ -59,8 +59,8 @@ char* send_command(int sockfd, const char *command) {
 
     printf("Sent %d bytes: %s\n", bytes_sent, command);
 
-    
     int bytes_received = recv(sockfd, buffer, MAX_CHAR_SIZE - 1, 0);
+
     if (bytes_received < 0) {
         perror("recv()");
         free(buffer); 
@@ -149,16 +149,20 @@ void get_new_port(const char *response, char *ip_address, int *port_number) {
 void receive_data(int sockfd, FILE *file) {
     char *buffer = (char *)malloc(MAX_CHAR_SIZE);
     int bytes_received;
+    int counter = 0;
 
     // Receive data
     while ((bytes_received = recv(sockfd, buffer, MAX_CHAR_SIZE, 0)) > 0) {
         // fwrite(buffer, 1, bytes_received, stdout);
         fwrite(buffer, 1, bytes_received, file);
+        counter+=bytes_received;
     }
 
     if (bytes_received == -1) {
         perror("Error receiving data");
     }
+
+    printf("Received %d bytes of file.\n", counter);
 }
 
 /**
@@ -335,7 +339,7 @@ int main(int argc, char *argv[]) {
     // Ask for passive mode and get response
     response = send_command(socked_id_ctrl, "pasv\r\n");
 
-     if (strncmp(response, "530", 3) == 0) {
+    if (strncmp(response, "530", 3) == 0) {
         printf("Wrong username/password combination.\n");
         exit(-1);
     }
@@ -359,14 +363,20 @@ int main(int argc, char *argv[]) {
         exit(-1);
     }   
 
-    // Receive file
+    // Receive file. First check for lenght.
+
+    char receive[MAX_CHAR_SIZE];
+    strcat(receive, "SIZE ");
+    strcat(receive, url_path);
+    //int size_char = send_command(socked_id_ctrl, receive);
+
     char filename[MAX_CHAR_SIZE]; // Command to download the file
     sprintf(filename, "RETR %s\n", url_path);
     response = send_command(socked_id_ctrl, filename);
 
     // Check for faillure
     if(strstr(response, "550 Failed to open file")) {
-        fprintf(stderr, "[Error] Failed to open file!\n");
+        fprintf(stderr, "[Error] Failed to open file! Does that file exist?\n");
         close_connection(socked_id_ctrl, socked_id_data);
         exit(-1);
     }
