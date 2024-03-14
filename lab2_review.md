@@ -41,3 +41,17 @@ In tux3 and tux2 there 2 routes in the routing table after the experiment 3. The
 It contains information of the destination; the gateway that computer should use to send packets to the destination; to the genmask, which is the netmask; some flags; metric wich is the number of hops to the destination; ref,  which is not used in linux kernel; use, which is number of lookups; and Iface which is iterface of network card.
 
 ### What ARP messages, and associated MAC addresses, are observed and why?
+On a ping from TUX3 to TUX2, on the other network, we see the following packets.
+On the interface eth0 from the TUX4, it is seen an ARP packet from 172.16.10.1 (TUX3, with the MAC ending with 2d:ef) requesting the MAC address from 172.16.10.254 (TUX4). The TUX4 then answerws this request stating that it´s MAC address is ....:2f:24. A few ms later, TUX4 does the same request, but to TUX3.
+On the interface eth1, we see a similar behaviour, but 172.16.11.253 (MAC ...:20:99), which is TUX4, asks for the MAC related to IP 172.16.11.1, which is TUX2, and then TUX2 answers back it´s MAC (..2e:c3). We see again this dialog, but starting with TUX2, and TUX4 answers back, a few milliseconds later.
+
+###What ICMP packets are observed and why?
+In the ping from TUX 3 to TUX 2, we see he ICMP packets going from 172.16.10.1 to 172.16.11.1. The IP header provides no information about the path the packet has to followm since this information is attached to the Ethernet hearder. Firstly, in eth0 (from tux4), we see the packet arriving with the destination MAC being the TUX4, and then this device acting as router sends the packet again to the wire using eth1, but now with the MAC address changed. So, the ICMP packets and their IP addresses do not bring the information on the IP layer of the path, but rather in the Ethernet field. This happens because we have a router in the middle connecting both networks. If we did not, we would see the ICMP packets with the MAC destination being the TUX2 itself, instead of the middle machine.
+
+###What are the IP and MAC addresses associated to ICMP packets and why?
+Ping from TUX 3 to TUX 2. In eth0, we see:
+ICMP packet from 176.16.10.1 to 176.16.11.1 as request.
+The MAC from source is 2d:ef and it goes to 2f:24 (TUX 4).
+Later, in eth1 (other network), we see the same packet coming out:
+ICMP packet from 176.16.10.1 to 176.16.11.1 as request.
+The MAC from source is 2e:c3 (TUX4) and it goes to 20:99 (TUX2).
