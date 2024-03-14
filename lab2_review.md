@@ -63,9 +63,10 @@ The reason why we see the MAC address is due to the configured router in the mid
 In the case of the workbench router, we can simply use /ip route add dst-address=XXX.XXX.XXX.XXX/XX gateway=YYY.YYY.YYY.YYY to send everything that should go to dst-address to the machine with the gateway address.
 
 ### What are the paths followed by the packets in the experiments carried out and why?
-
+When we remove the route to 172.16.10.0/2 via TUX4,and ping TUX3 from TUX2 what happens is that the ICMP packets won´t reach the destination directly, TUX3, since it does not know how to reach that diferent network. ### TODO
 
 ### How to configure NAT in a commercial router?
+In our case the router at the workbench has NAT on by default. To re-activate it, one can use  /ip firewall nat enable 0.
 
 ### What does NAT do?
-A NAT is meant to perform a network address translation, and the name suggests. This basically allows one to configure a network with the IPs he want and opening to the internet only one IP, from which the traffic is sent from/to the network. For instance, we can configure a network just as we did, with the diferent IPs, without conflicting with other networks that could be using the same IPs.
+A NAT is meant to perform a network address translation, and the name suggests. This basically allows one to configure a network with the IPs he want and opening to the internet only one IP, from which the traffic is sent from/to the network. For instance, we can configure a network just as we did, with the diferent IPs, without conflicting with other networks that could be using the same IPs. If we want to connect to the outside Internet, our packets are changed by the NAT to have a diferent address, that is available on the internet, so that it serves as a "front dor" to our network. The services we are contacting then answer to the IP given by the NAT, it captures the packets, and then changes the IP headers again to the original ones. It allows multiple devices on a private network to share a single public IP address for internet access.
