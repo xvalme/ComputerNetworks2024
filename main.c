@@ -38,6 +38,30 @@ struct sockaddr_in get_server_addr(const char* ip_address, int data_port) {
 }
 
 /**
+ * @brief check recived code for errors
+ * 
+ * @param code 
+ * @return int 1 if error
+ */
+int check_return_code(char code) {
+    switch (code)
+    {
+    case '4':
+    case '5':
+        return 1;
+        break;
+
+    case '1':
+    case '2':
+    case '3':
+        return 0;
+        break;
+    default:
+        break;
+    }
+}
+
+/**
  * @brief send command to ftp server
  * 
  * @param sockfd socket file descriptor
@@ -71,6 +95,17 @@ char* send_command(int sockfd, const char *command) {
 
     // printf("Response from ftp server: %s\n", buffer);
     printf("Received %d bytes. \n", bytes_received);
+
+    /* check for error code */
+    // cif(check_return_code(buffer[0])){
+
+    // }
+
+    if (check_return_code(buffer[0])) {
+        printf("Response from ftp server: %s\n", buffer);
+        exit(-1);
+
+    }
 
     return buffer;
 }
@@ -131,7 +166,9 @@ void get_new_port(const char *response, char *ip_address, int *port_number) {
     int x1, x2, x3, x4, x5, x6;
         sscanf(numbers, "%d,%d,%d,%d,%d,%d", &x1, &x2, &x3, &x4, &x5, &x6);
         
-    /* TODO check code x1 == 227 */
+    if (x1 != 227) {
+        fprintf(stderr, "Failed entering passive mode\n");
+    }
 
     // Calculate IP address
     sprintf(ip_address, "%d.%d.%d.%d", x1, x2, x3, x4);
