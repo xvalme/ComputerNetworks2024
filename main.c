@@ -68,7 +68,7 @@ int check_return_code(char code) {
  * @param command command to send
  */
 char* send_command(int sockfd, const char *command) {
-    char *buffer = (char *)malloc(MAX_CHAR_SIZE);
+    char *buffer = (char *)malloc(MAX_CHAR_SIZE); // save response from server
     if (buffer == NULL) {
         perror("malloc()");
         exit(EXIT_FAILURE);
@@ -93,14 +93,9 @@ char* send_command(int sockfd, const char *command) {
 
     buffer[bytes_received] = '\0'; // Ensure null-termination
 
-    // printf("Response from ftp server: %s\n", buffer);
     printf("Received %d bytes. \n", bytes_received);
 
-    /* check for error code */
-    // cif(check_return_code(buffer[0])){
-
-    // }
-
+    // check for error
     if (check_return_code(buffer[0])) {
         printf("Response from ftp server: %s\n", buffer);
         exit(-1);
@@ -138,7 +133,6 @@ void initialize_connection(int sockfd) {
         }
     }
 
-    //printf("Response from ftp server:\n %s\n", buffer);
 }
 
 /**
@@ -165,11 +159,7 @@ void get_new_port(const char *response, char *ip_address, int *port_number) {
     // Extract numbers
     int x1, x2, x3, x4, x5, x6;
         sscanf(numbers, "%d,%d,%d,%d,%d,%d", &x1, &x2, &x3, &x4, &x5, &x6);
-        
-    if (x1 != 227) {
-        fprintf(stderr, "Failed entering passive mode\n");
-    }
-
+    
     // Calculate IP address
     sprintf(ip_address, "%d.%d.%d.%d", x1, x2, x3, x4);
         
@@ -190,7 +180,6 @@ void receive_data(int sockfd, FILE *file) {
 
     // Receive data
     while ((bytes_received = recv(sockfd, buffer, MAX_CHAR_SIZE, 0)) > 0) {
-        // fwrite(buffer, 1, bytes_received, stdout);
         fwrite(buffer, 1, bytes_received, file);
         counter+=bytes_received;
     }
