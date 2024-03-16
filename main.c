@@ -93,14 +93,7 @@ char* send_command(int sockfd, const char *command) {
 
     buffer[bytes_received] = '\0'; // Ensure null-termination
 
-    printf("Received %d bytes. \n", bytes_received);
-
-    // check for error
-    if (check_return_code(buffer[0])) {
-        printf("Response from ftp server: %s\n", buffer);
-        exit(-1);
-
-    }
+    printf("Received %d bytes: %s \n", bytes_received, buffer);
 
     return buffer;
 }
@@ -257,6 +250,7 @@ int main(int argc, char *argv[]) {
         char *token = strtok(temp, ":");
         
         if (!token) {
+            //There is only user.
             printf("Invalid URL. Format: ftp://[<user>:<password>@]<host>/<url-path> \n");
             exit(-1);
         }
@@ -264,16 +258,27 @@ int main(int argc, char *argv[]) {
         strcpy(user, token);
 
         char *rest = strtok(NULL, "");
-        token = strtok( rest , "@");
 
         if (!rest) {
-            printf("Invalid URL. Format: ftp://[<user>:<password>@]<host>/<url-path> \n");
-            exit(-1);
+            //There is no password. 
+            
+            char *a = strtok(temp, "@");
+
+            strcpy(user, a);
+
+            rest = strtok(NULL, "");
+
         }
 
-        strcpy(password, token);
-        
-        rest = strtok(NULL, "");
+        else {
+
+            char *a = strtok(rest, "@");
+
+            strcpy(password, a);
+            
+            rest = strtok(NULL, "");
+
+        }
 
         if (!rest) {
             printf("Invalid URL. Format: ftp://[<user>:<password>@]<host>/<url-path> \n");
@@ -282,12 +287,10 @@ int main(int argc, char *argv[]) {
 
         strcpy(url, rest);
 
-        if (!strlen(user) || !strlen(password) || !strlen(url)){
+        if (!strlen(user) || !strlen(url)){
             printf("Invalid URL. Format: ftp://[<user>:<password>@]<host>/<url-path> \n");
             exit(-1);
         }
-
-        user_connection = 1;
 
     }
     
@@ -340,7 +343,7 @@ int main(int argc, char *argv[]) {
     }
 
     // Connect to the server
-    fprintf(stderr, "Connecting...\n");
+    printf("Connecting...\n");
     if (connect(socked_id_ctrl, (struct sockaddr *)&server_addr_ctrl, sizeof(server_addr_ctrl)) < 0) {
         perror("connect()");
         exit(-1);
@@ -356,17 +359,35 @@ int main(int argc, char *argv[]) {
     sprintf(login_command, "user %s\r\n", user);
     response = send_command(socked_id_ctrl, login_command); 
 
+    if (strncmp(response, "331 Please specify the password." , 32) != 0) {
+        //Not the right answer from the server. Leaving.
+        printf("Error: Leaving...\n");
+        exit(-1);
+    }
+
     // password
     char password_command[MAX_CHAR_SIZE];
 
     sprintf(password_command, "pass %s\r\n", password);
-    send_command(socked_id_ctrl, password_command);
+    response = send_command(socked_id_ctrl, password_command);
+
+    if (strncmp(response, "230" , 3) != 0) {
+        //Not the right answer from the server. Leaving.
+        printf("Error while logging in.\n");
+        exit(-1);
+    }
 
     // Ask for passive mode and get response
     response = send_command(socked_id_ctrl, "pasv\r\n");
 
     if (strncmp(response, "530", 3) == 0) {
         printf("Wrong username/password combination.\n");
+        exit(-1);
+    }
+
+    if (strncmp(response, "227" , 3) != 0) {
+        //Not the right answer from the server. Leaving.
+        printf("Error while entering pasv\n");
         exit(-1);
     }
 
@@ -397,8 +418,9 @@ int main(int argc, char *argv[]) {
 
     // Check for faillure
     if(strstr(response, "550 Failed to open file")) {
-        fprintf(stderr, "[Error] Failed to open file! Does that file exist?\n");
         close_connection(socked_id_ctrl, socked_id_data);
+        printf("[Error] Failed to open file! Does that file exist?\n");
+
         exit(-1);
     }
 
