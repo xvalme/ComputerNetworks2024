@@ -5,6 +5,8 @@
 #include <fcntl.h>
 #include <termios.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 #define BAUDRATE B38400
 #define MODEMDEVICE "/dev/ttyS1"
@@ -73,21 +75,71 @@ int main(int argc, char** argv)
 
 
 
-    for (i = 0; i < 255; i++) {
-        buf[i] = 'a';
-    }
+    
 
-    /*testing*/
-    buf[25] = '\n';
+	const char flag = 0x5c;
+	const char address = 0x03;
+	const char control = 0x08;
+	const char bcc1 = address^control;
+	
+    char buffer[5]= {flag, address, control, bcc1, flag};
 
-    unsigned char *string = {0x5c, 0x03, 0x08, "", 0x5c};
-
-    string[3] = string[1] ^ string[2];
-
-    res = write(fd, string, 5);
-
+    res = write(fd,buffer,5);
     printf("%d bytes written\n", res);
 
+
+	char respond_buff[32];
+	
+	
+	
+    while (STOP==FALSE) {       /* loop for input */
+        res = read(fd,buf,5);   /* returns after 5 chars have been input */
+        buf[res]=0;               /* so we can printf... */
+        printf(":%s:%d\n", buf, res);
+        char received_correct = 1;
+        if (memcmp(buf, &flag, 1)==0){
+			printf("Flag correct\n");
+		}else{
+			received_correct=0;
+		}
+		
+		if (memcmp(buf+1, &address, 1)==0){
+			printf("Address correct\n");
+		}else{
+			received_correct=0;
+		}
+		
+		if (memcmp(buf+2, &control, 1)==0){
+			printf("Control is SET\n");
+		}else{
+			received_correct=0;
+		}
+		
+		char xor_shouldbe = *(buf+1) ^ *(buf+2);
+		if (memcmp(buf+3, &xor_shouldbe, 1)==0){
+			printf("BCC is correct\n");
+		}else{
+			received_correct=0;
+		}
+		
+		if (memcmp(buf+4, &flag, 1)==0){
+			printf("END flag is correct\n");
+		}else{
+			received_correct=0;
+		}
+		
+		if (received_correct){
+			printf("Everything good\n");
+			// if everything is received correctly we respond
+			respond_buff[0]=flag;
+			respond_buff[1]=address;
+			respond_buff[2]=control;
+			respond_buff[3]=control ^ address;
+			respond_buff[4]=flag;
+		}
+		
+		STOP=TRUE;
+    }
 
     /*
     O ciclo FOR e as instruções seguintes devem ser alterados de modo a respeitar
@@ -95,7 +147,6 @@ int main(int argc, char** argv)
     */
 
     sleep(1);
-
     if ( tcsetattr(fd,TCSANOW,&oldtio) == -1) {
         perror("tcsetattr");
         exit(-1);
