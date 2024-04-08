@@ -68,10 +68,34 @@ int main(int argc, char** argv)
     printf("New termios structure set\n");
 
     while (STOP==FALSE) {       /* loop for input */
-        res = read(fd,buf,255);   /* returns after 5 chars have been input */
+        res = read(fd,buf,5);   /* returns after 5 chars have been input */
         buf[res]=0;               /* so we can printf... */
-        printf(":%s:%d\n", buf, res);
-        if (buf[0]=='z') STOP=TRUE;
+	
+	//Check if it arrived sucessfully
+
+	printf("0x%x 0x%x 0x%x 0x%x 0x%x\n", buf[0], buf[1], buf[2], buf[3], buf[4]);
+
+        char correct_answer [5] = {0x5c, 0x03, 0x08, "", 0x5c};
+
+	correct_answer[3]  = buf[1]^buf[2];
+
+	if (strncmp(correct_answer, buf, 5) == 0) {
+	    printf("Sucess\n");
+	    //Sending back the UA packet.
+
+	    char UA [5] = {0x5c, 0x03, 0x06, "", 0x5c};
+
+	    UA[3] = UA[1]^UA[2];
+
+	    res = write(fd, UA, 5);
+		
+            printf("Bye\n");
+	}  	        
+
+	
+
+        //printf(":%s:%d\n", buf, res);
+        //if (buf[0]=='z') STOP=TRUE;
     }
 
 
@@ -79,6 +103,7 @@ int main(int argc, char** argv)
     /*
     O ciclo WHILE deve ser alterado de modo a respeitar o indicado no guião
     */
+
     sleep(1);
     tcsetattr(fd,TCSANOW,&oldtio);
     close(fd);
