@@ -17,74 +17,76 @@
 volatile int STOP=FALSE;
 
 int handshake(int fd) {
-    fprintf("[INFO] Initializing Handshake \n");
+    fprintf(stderr, "[INFO] Initializing Handshake \n");
 
 	const char flag = 0x5c;
 	const char address = 0x03;
 	const char control = 0x08;
+	
 	const char bcc1 = address^control;
 	
     char buffer[5]= {flag, address, control, bcc1, flag};
 
-    res = write(fd,buffer,5);
+    int res = write(fd,buffer,5);
 
     if (res == 5) {
-        fprintf("[INFO] Sent SET packet\n");
+        fprintf(stderr, "[INFO] Sent SET packet\n");
     } else {
-        fprintf("[ERR] Error sending SET packet\n");
+        fprintf(stderr, "[ERR] Error sending SET packet\n");
         return -1;
     }
 
     char buf[5];
-
+	
     while (STOP==FALSE) {       /* loop for input */
-        int res = read(fd,buf,5);   /* returns after 5 chars have been input */
+        res = read(fd,buf,5);   /* returns after 5 chars have been input */
         buf[res]=0;               /* so we can printf... */
 
         char received_correct = 1;
         if (memcmp(buf, &flag, 1)==0){
-			//printf("Flag correct\n");
+			printf("Flag correct\n");
 		}else{
 			received_correct=0;
 		}
 		
 		if (memcmp(buf+1, &address, 1)==0){
-			//printf("Address correct\n");
+			printf("Address correct\n");
 		}else{
 			received_correct=0;
 		}
-		
-		if (memcmp(buf+2, &control, 1)==0){
-			//printf("Control is SET\n");
+		const char control_ua = 0x06;
+		if (memcmp(buf+2, &control_ua, 1)==0){
+			printf("Control is SET\n");
 		}else{
 			received_correct=0;
 		}
 		
 		char xor_shouldbe = *(buf+1) ^ *(buf+2);
 		if (memcmp(buf+3, &xor_shouldbe, 1)==0){
-			//printf("BCC is correct\n");
+			printf("BCC is correct\n");
 		}else{
 			received_correct=0;
 		}
 		
 		if (memcmp(buf+4, &flag, 1)==0){
-			//printf("END flag is correct\n");
+			printf("END flag is correct\n");
 		}else{
 			received_correct=0;
 		}
 		
+		
 		if (received_correct){
-			fprintf("[INFO] Received UA packet\n");
+			fprintf(stderr, "[INFO] Received UA packet\n");
 			
 		}
         else{
-            fprintf("[ERR] Corrupted UA packet\n");
+            fprintf(stderr, "[ERR] Corrupted UA packet\n");
             return -1;
         }
 		
     }
 
-    fprintf("[INFO] Connection established\n");
+    fprintf(stderr, "[INFO] Connection established\n");
     return 0;
 
 
