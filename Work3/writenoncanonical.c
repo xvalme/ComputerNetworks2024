@@ -16,6 +16,15 @@
 
 volatile int STOP=FALSE;
 
+typedef enum {
+    Start_State,
+    Flag_RCV_State,
+    A_RCV_State,
+    C_RCV_State,
+    BCC_OK_State,
+    Stop_State
+} StateMachine;
+
 int handshake(int fd) {
     fprintf(stderr, "[INFO] Initializing Handshake \n");
 
@@ -43,50 +52,69 @@ int handshake(int fd) {
         buf[res]=0;               /* so we can printf... */
 
         char received_correct = 1;
-        if (memcmp(buf, &flag, 1)==0){
-			printf("Flag correct\n");
-		}else{
-			received_correct=0;
-		}
-		
-		if (memcmp(buf+1, &address, 1)==0){
-			printf("Address correct\n");
-		}else{
-			received_correct=0;
-		}
 		const char control_ua = 0x06;
-		if (memcmp(buf+2, &control_ua, 1)==0){
-			printf("Control is SET\n");
-		}else{
-			received_correct=0;
-		}
-		
 		char xor_shouldbe = *(buf+1) ^ *(buf+2);
-		if (memcmp(buf+3, &xor_shouldbe, 1)==0){
-			printf("BCC is correct\n");
-		}else{
-			received_correct=0;
-		}
-		
-		if (memcmp(buf+4, &flag, 1)==0){
-			printf("END flag is correct\n");
-		}else{
-			received_correct=0;
-		}
-		
-		
-		if (received_correct){
-			fprintf(stderr, "[INFO] Received UA packet\n");
-			
-		}
-        else{
-            fprintf(stderr, "[ERR] Corrupted UA packet\n");
-            return -1;
-        }
+        
+        StateMachine state = Start_State;
+        switch (state) {
+        case Start_State:
+            if (buf[0] == flag) {
+                state = Flag_RCV_State;
+            } else {
+                state = Start_State;
+            }
+            break;
+
+        case Flag_RCV_State:
+            if (buf[1] == address) {
+                state = A_RCV_State;
+            } else if (buf[1] == flag) {
+                state = Flag_RCV_State;
+            } else {
+                state = Start_State;
+            }
+            break;
+
+        case A_RCV_State:
+            if (buf[2] == control_ua) {
+                state = C_RCV_State;
+            } else if (buf[2] == flag) {
+                state = Flag_RCV_State;
+            } else {
+                state = Start_State;
+            }
+            break;
+
+        case C_RCV_State:
+            if (buf[3] == xor_shouldbe) {
+                state = BCC_OK_State;
+            } else if (buf[3] == flag) {
+                state = Flag_RCV_State;
+            } else {
+                state = Start_State;
+            }
+            break;
+
+        case BCC_OK_State:
+            if (buf[4] == flag) {
+                state = Stop_State;
+                fprintf(stderr, "[INFO] Connection established\n");
+                return 0;
+            } else {
+                state = Start_State;
+            }
+            break;
+
+        case Stop_State:
+            fprintf(stderr, "[INFO] Connection established\n");
+            return 0;
+            break;
+    }
+
+
 		
     }
 
-    fprintf(stderr, "[INFO] Connection established\n");
     return 0;
 
 
