@@ -15,38 +15,121 @@ volatile int STOP=FALSE;
 
 int receive_handshake(int fd) {
     char buf[6];
+    int temporary_size = 6;
+    char temporary[temporary_size];
+    int res;
 
-    while(STOP == FALSE){
-        int res = read(fd,buf,5);   /* returns after 5 chars have been input */
-        buf[res]=0;               /* so we can printf... */
+    char SET_correct [5] = {0x5c, 0x03, 0x08, 0, 0x5c};
+    char UA [5] = {0x5c, 0x03, 0x06, 0, 0x5c};
+    UA[3] = UA[1]^UA[2];
+
+    char STATE = 'S';
+
+    while(TRUE){
+
+        if (STOP == FALSE) {
+            res = read(fd,buf,1);   
+            buf[res]=0;       
+
+            if (res) {
+                STOP = TRUE;
+                continue;
+            } 
+        }
+
+        if (STOP == TRUE){
+
+            //fprintf(stderr, "[INFO] Received byte: %x\n", buf[0]);
+
+            switch (STATE) {
+                case 'S':
+                    {
+                    if (buf[0] == SET_correct[0]){
+                        STATE = 'F';
+                        temporary[0] = buf[0];
+                    }
+                    break;
+                    }
+                case 'F':
+                    {
+                    if (buf[0] == SET_correct[0]){
+                        STATE = 'F';
+                    }
+                    else if (buf[0] == SET_correct[1]){
+                        STATE = 'A';
+                        temporary[1] = buf[0];
+                    }
+                    else {
+                        STATE = 'S';
+                        memset (temporary, 0, temporary_size );
+                    }
+
+                    break;
+                    }
+                case 'A':
+                    if (buf[0] == SET_correct[2]){
+                        STATE = 'C';
+                        temporary[2] = buf[0];
+                    }
+                    else if (buf[0] == temporary[1]) {
+                        STATE = 'F';
+                    }
+                    else {
+                        STATE = 'S';
+                        memset (temporary, 0, temporary_size );
+                    }
+
+                    break;
+                case 'C':
+                    {
+                    char xor = temporary[1]^temporary[2];
+
+                    if (buf[0] == xor) {
+                        STATE = 'B';
+                        temporary[3] = buf[0];
+                    }
+                    else if (buf[0] == temporary[1]) {
+                        STATE = 'F';
+                    }
+                    else {
+                        STATE = 'S';
+                        memset (temporary, 0, temporary_size );
+                    }
+                    break;
+                    }
+                case 'B':
+                    if (buf[0] == SET_correct[4]) {
+                        STATE = 'Z';
+                        temporary[4] = buf[0];
+
+                        printf("[INFO] Received correct SET\n");
+
+                        char UA [5] = {0x5c, 0x03, 0x06, "", 0x5c};
+
+                        UA[3] = UA[1]^UA[2];
+
+                        int res = write(fd, UA, 5);
+
+                        printf("%d\n", res);
+
+                        return 1;
+                    }
+
+                    else {
+                        STATE = 'F';
+                        memset (temporary, 0, temporary_size );
+                    }
+
+                    break;
+
+                default:
+                    fprintf(stderr, "%c\n", STATE);            
+            }
+
+            STOP = FALSE;
+            continue;
+        }
     }
-
-    fprintf("[INFO] Received SET packet\n");
-
-    char correct_answer [5] = {0x5c, 0x03, 0x08, "", 0x5c};
-    correct_answer[3]  = buf[1]^buf[2];
-
-	if (strncmp(correct_answer, buf, 5) == 0) {
-	    
-        fprintf("[SUC] SET packet not corrupted\n");
-
-	    char UA [5] = {0x5c, 0x03, 0x06, "", 0x5c};
-
-	    UA[3] = UA[1]^UA[2];
-
-	    res = write(fd, UA, 5);
-		
-        printf("[INFO] Sent UA packet\n");
-        printf("[INFO] Connection established\n");
-
-        return 0;
-	}  	    
-
-    else {
-        fprintf("[ERR] SET packet corrupted\n");
-        return -1;
-    }
-
 }
 
 int main(int argc, char** argv)
@@ -85,7 +168,7 @@ int main(int argc, char** argv)
     newtio.c_lflag = 0;
 
     newtio.c_cc[VTIME]    = 0;   /* inter-character timer unused */
-    newtio.c_cc[VMIN]     = 5;   /* blocking read until 5 chars received */
+    newtio.c_cc[VMIN]     = 1;   /* blocking read until 5 chars received */
 
     /*
     VTIME e VMIN devem ser alterados de forma a proteger com um temporizador a
@@ -103,7 +186,6 @@ int main(int argc, char** argv)
     printf("New termios structure set\n");
 
     receive_handshake(fd);
-}
 
     sleep(1);
     tcsetattr(fd,TCSANOW,&oldtio);
