@@ -31,7 +31,8 @@ int handshake(int fd) {
 	const char flag = 0x5c;
 	const char address = 0x03;
 	const char control = 0x08;
-	
+	const char control_ua = 0x06;
+
 	const char bcc1 = address^control;
 	
     char buffer[5]= {flag, address, control, bcc1, flag};
@@ -52,72 +53,63 @@ int handshake(int fd) {
         buf[res]=0;               /* so we can printf... */
 
         char received_correct = 1;
-		const char control_ua = 0x06;
 		char xor_shouldbe = *(buf+1) ^ *(buf+2);
-        
+
         StateMachine state = Start_State;
-        switch (state) {
-        case Start_State:
-            if (buf[0] == flag) {
-                state = Flag_RCV_State;
-            } else {
-                state = Start_State;
+        while (state != Stop_State) {        
+            switch (state) {
+            case Start_State:
+                if (buf[0] == flag) {
+                    state = Flag_RCV_State;
+                } else {
+                    state = Start_State;
+                }
+                break;
+
+            case Flag_RCV_State:
+                if (buf[1] == address) {
+                    state = A_RCV_State;
+                } else if (buf[1] == flag) {
+                    state = Flag_RCV_State;
+                } else {
+                    state = Start_State;
+                }
+                break;
+
+            case A_RCV_State:
+                if (buf[2] == control_ua) {
+                    state = C_RCV_State;
+                } else if (buf[2] == flag) {
+                    state = Flag_RCV_State;
+                } else {
+                    state = Start_State;
+                }
+                break;
+
+            case C_RCV_State:
+                if (buf[3] == xor_shouldbe) {
+                    state = BCC_OK_State;
+                } else if (buf[3] == flag) {
+                    state = Flag_RCV_State;
+                } else {
+                    state = Start_State;
+                }
+                break;
+
+            case BCC_OK_State:
+                if (buf[4] == flag) {
+                    state = Stop_State;
+                    fprintf(stderr, "[INFO] Connection established\n");
+                    return 0;
+                } else {
+                    state = Start_State;
+                }
+                break;
             }
-            break;
-
-        case Flag_RCV_State:
-            if (buf[1] == address) {
-                state = A_RCV_State;
-            } else if (buf[1] == flag) {
-                state = Flag_RCV_State;
-            } else {
-                state = Start_State;
-            }
-            break;
-
-        case A_RCV_State:
-            if (buf[2] == control_ua) {
-                state = C_RCV_State;
-            } else if (buf[2] == flag) {
-                state = Flag_RCV_State;
-            } else {
-                state = Start_State;
-            }
-            break;
-
-        case C_RCV_State:
-            if (buf[3] == xor_shouldbe) {
-                state = BCC_OK_State;
-            } else if (buf[3] == flag) {
-                state = Flag_RCV_State;
-            } else {
-                state = Start_State;
-            }
-            break;
-
-        case BCC_OK_State:
-            if (buf[4] == flag) {
-                state = Stop_State;
-                fprintf(stderr, "[INFO] Connection established\n");
-                return 0;
-            } else {
-                state = Start_State;
-            }
-            break;
-
-        case Stop_State:
-            fprintf(stderr, "[INFO] Connection established\n");
-            return 0;
-            break;
-    }
-
-
+        }
 		
     }
-
     return 0;
-
-
 }
 
 int main(int argc, char** argv)
@@ -127,14 +119,11 @@ int main(int argc, char** argv)
     char buf[255];
     int i, sum = 0, speed = 0;
 
-    /*Comment to use virtual ports
     if ( (argc < 2) ||
-         ((strcmp("/dev/ttyS0", argv[1])!=0) &&
-          (strcmp("/dev/ttyS1", argv[1])!=0) )) {
-        printf("Usage:\tnserial SerialPort\n\tex: nserial /dev/ttyS1\n");
+         ((strcmp("/dev/ttyS10", argv[1])!=0) )) {
+        printf("Usage:\tnserial SerialPort\n\tex: nserial /dev/ttyS10\n");
         exit(1);
     }
-    */
 
 
     /*
@@ -179,7 +168,11 @@ int main(int argc, char** argv)
 
     printf("New termios structure set\n");
 
-    handshake(fd);
+
+    if (handshake(fd) != 0) {
+        fprintf(stderr, "[ERR] Error in handshake\n");
+        exit(-1);
+    }
 
     sleep(1);
     if ( tcsetattr(fd,TCSANOW,&oldtio) == -1) {
