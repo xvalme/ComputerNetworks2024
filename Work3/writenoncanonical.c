@@ -34,6 +34,7 @@ int handshake(int fd) {
 	const char control_ua = 0x06;
 
 	const char bcc1 = address^control;
+	const char bcc1_ua = address^control_ua;
 	
     char buffer[5]= {flag, address, control, bcc1, flag};
 
@@ -46,67 +47,65 @@ int handshake(int fd) {
         return -1;
     }
 
-    char buf[5];
+    char buf[6];
 	
-    while (STOP==FALSE) {       /* loop for input */
-        res = read(fd,buf,5);   /* returns after 5 chars have been input */
+    StateMachine state = Start_State;
+    while (STOP==FALSE || state != Stop_State) {       /* loop for input */
+        res = read(fd,buf,1);   /* returns after 5 chars have been input */
         buf[res]=0;               /* so we can printf... */
-
+        // fprintf(stderr, "[INFO] Received byte: %x, %d\n", buf[0], state);
         char received_correct = 1;
-		char xor_shouldbe = *(buf+1) ^ *(buf+2);
-
-        StateMachine state = Start_State;
-        while (state != Stop_State) {        
-            switch (state) {
-            case Start_State:
-                if (buf[0] == flag) {
-                    state = Flag_RCV_State;
-                } else {
-                    state = Start_State;
-                }
-                break;
-
-            case Flag_RCV_State:
-                if (buf[1] == address) {
-                    state = A_RCV_State;
-                } else if (buf[1] == flag) {
-                    state = Flag_RCV_State;
-                } else {
-                    state = Start_State;
-                }
-                break;
-
-            case A_RCV_State:
-                if (buf[2] == control_ua) {
-                    state = C_RCV_State;
-                } else if (buf[2] == flag) {
-                    state = Flag_RCV_State;
-                } else {
-                    state = Start_State;
-                }
-                break;
-
-            case C_RCV_State:
-                if (buf[3] == xor_shouldbe) {
-                    state = BCC_OK_State;
-                } else if (buf[3] == flag) {
-                    state = Flag_RCV_State;
-                } else {
-                    state = Start_State;
-                }
-                break;
-
-            case BCC_OK_State:
-                if (buf[4] == flag) {
-                    state = Stop_State;
-                    fprintf(stderr, "[INFO] Connection established\n");
-                    return 0;
-                } else {
-                    state = Start_State;
-                }
-                break;
+    
+        switch (state) {
+        case Start_State:
+            if (buf[0] == flag) {
+                state = Flag_RCV_State;
+            } else {
+                state = Start_State;
             }
+            break;
+
+        case Flag_RCV_State:
+            if (buf[0] == address) {
+                state = A_RCV_State;
+            } else if (buf[0] == flag) {
+                state = Flag_RCV_State;
+            } else {
+                state = Start_State;
+            }
+            break;
+
+        case A_RCV_State:
+            if (buf[0] == control_ua) {
+                state = C_RCV_State;
+            } else if (buf[0] == flag) {
+                state = Flag_RCV_State;
+            } else {
+                state = Start_State;
+            }
+            break;
+
+        case C_RCV_State:
+            if (buf[0] == bcc1_ua) {
+                state = BCC_OK_State;
+            } else if (buf[0] == flag) {
+                state = Flag_RCV_State;
+            } else {
+                state = Start_State;
+            }
+            break;
+
+        case BCC_OK_State:
+            if (buf[0] == flag) {
+                state = Stop_State;
+                fprintf(stderr, "[INFO] Connection established\n");
+                return 0;
+            } else {
+                state = Start_State;
+            }
+            break;
         }
+
 		
     }
     return 0;
