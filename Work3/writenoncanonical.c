@@ -118,11 +118,11 @@ int main(int argc, char** argv)
     char buf[255];
     int i, sum = 0, speed = 0;
 
-    if ( (argc < 2) ||
+    /*if ( (argc < 2) ||
          ((strcmp("/dev/ttyS10", argv[1])!=0) )) {
         printf("Usage:\tnserial SerialPort\n\tex: nserial /dev/ttyS10\n");
         exit(1);
-    }
+    }*/
 
 
     /*

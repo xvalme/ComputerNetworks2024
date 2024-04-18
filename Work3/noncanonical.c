@@ -13,7 +13,7 @@
 
 volatile int STOP=FALSE;
 
-#define DATA_BUFFER_SIZE 1024;
+#define DATA_BUFFER_SIZE 1024
 
 int handshake(int fd) {
     char buf[6];
@@ -161,7 +161,7 @@ int receive_data(int fd){
     char current_ctrl = Ctrl_down;
     
     int number_bytes_received = 0;
-    char moving_xor = '';
+    char moving_xor = ' ';
 
 
     while(TRUE){
@@ -261,7 +261,7 @@ int receive_data(int fd){
 
                 case 5:
                     if (buf[0] == moving_xor) {
-                        STATE = 6:
+                        STATE = 6;
                         temporary[5] = buf[0];
                     }
                     else {
@@ -284,8 +284,9 @@ int receive_data(int fd){
                     break;
                     
             STOP = FALSE;
-            
+            }
         }
+    }
 
 }
 
