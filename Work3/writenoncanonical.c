@@ -111,6 +111,40 @@ int handshake(int fd) {
     return 0;
 }
 
+int send_dummy_data(int fd){
+
+    char test_packet[] = {0x5c, 0x01, 0 , 0 , 'H', 'e', 'l', 'l', 'o', ',', ' ', 'w', 'o', 'r', 'l', 'd', '!', 'X',0, 0x5c};
+
+    test_packet[2] = 0xc0;
+    test_packet[3] = test_packet[1]^test_packet[2];
+
+    char bcc2 = ' ';
+    for (int i = 4; i < 18; i++) {
+        printf("%x|", bcc2);
+        bcc2 ^= test_packet[i];
+    }
+
+    int pos = sizeof(test_packet)-2 ;
+
+    test_packet[pos] = bcc2;
+
+    for (int i = 0; i < sizeof(test_packet); i++) {
+        fprintf(stderr, "%x ", test_packet[i]);
+    }
+
+    int res = write(fd,test_packet, sizeof(test_packet));
+    
+    if (res == sizeof(test_packet)) {
+        fprintf(stderr, "[INFO] Sent dummy data packet\n");
+    } else {
+        fprintf(stderr, "[ERR] Error sending dummy data packet\n");
+        return -1;
+    }
+
+    return 0;
+
+}
+
 int main(int argc, char** argv)
 {
     int fd,c, res;
@@ -172,6 +206,8 @@ int main(int argc, char** argv)
         fprintf(stderr, "[ERR] Error in handshake\n");
         exit(-1);
     }
+
+    send_dummy_data(fd);
 
     sleep(1);
     if ( tcsetattr(fd,TCSANOW,&oldtio) == -1) {
