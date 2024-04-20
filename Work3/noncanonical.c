@@ -142,7 +142,7 @@ int handshake(int fd) {
     }
 }
 
-int receive_data(int fd) {
+int receive_data_packet(int fd, int current_ctrl_int, char *data_buffer, int *DATA_BUFFER_SIZE) {
 
     int res;
     char buf[DATA_BUFFER_SIZE];
@@ -157,7 +157,6 @@ int receive_data(int fd) {
     char Ctrl_up = 0xc0;
     char Ctrl_down = 0x80;
 
-    char current_ctrl_int = 1;
     char current_ctrl = Ctrl_down;
     
     int number_bytes_received = 0;
@@ -265,7 +264,7 @@ int receive_data(int fd) {
                             printf("%c", data[i]);
                         }
                         printf("\n");
-                        current_ctrl_int = !current_ctrl_int;
+                        memcpy(data_buffer, data, number_bytes_received);
                         return 1;
                     }
                     else {
@@ -277,6 +276,22 @@ int receive_data(int fd) {
             STOP = FALSE;
         }
     }
+}
+
+int receive_multiple_data_packets(int fd){
+
+    char data_buffer[DATA_BUFFER_SIZE];
+
+    int res;
+    int current_ctrl_int = 0;
+
+    while(TRUE){
+        res = receive_data_packet(fd, current_ctrl_int, data_buffer, &DATA_BUFFER_SIZE);
+        if (res == 1) {
+            current_ctrl_int = !current_ctrl_int;
+        }
+    }
+
 }
 
 int main(int argc, char** argv)
@@ -335,7 +350,7 @@ int main(int argc, char** argv)
     printf("New termios structure set\n");
 
     handshake(fd);
-    receive_data(fd);
+    receive_multiple_data_packets(fd);
 
     sleep(1);
     tcsetattr(fd,TCSANOW,&oldtio);
