@@ -33,7 +33,7 @@ int handshake(int fd) {
     fprintf(stderr, "[INFO] Initializing Handshake \n");
 
 	const char flag = 0x5c;
-	const char address = 0x03;
+	const char address = 0x01;
 	const char control = 0x08;
 	const char control_ua = 0x06;
 
@@ -115,7 +115,7 @@ int handshake(int fd) {
 
 int receive_data(int fd) {
     const char flag = 0x5c;
-	const char address = 0x03;
+	const char address = 0x01;
 	const char control = 0x08;
 	const char control_ua = 0x06;
 
@@ -219,33 +219,41 @@ int receive_data(int fd) {
     return 0;
 }
 
-int send_data(int fd, const char* data, int data_length) {
-    const char flag = 0x5c;
-    const char address = 0x03;
-    const char control = 0x08;
+int send_data(int fd, const char* data, int data_length, int ctrl) {
+	char test_packet[] = {0x5c, 0x01, 0 , 0 , 'H', 'e', 'l', 'l', 'o', ',', ' ', 'w', 'o', 'r', 'l', 'd', '!', 'X',0, 0x5c};
 
-    char buffer[data_length + 5]; // Data length + 1 address byte + 1 control byte + 2 flag bytes
-    buffer[0] = flag; // Start flag
-    buffer[1] = address;
-    buffer[2] = control;
-    for (int i = 0; i < data_length; ++i) {
-        buffer[i + 3] = data[i];
-    }
-    char bcc = address ^ control;
-    for (int i = 0; i < data_length; ++i) {
-        bcc ^= data[i];
-    }
-    buffer[data_length + 3] = bcc;
-    buffer[data_length + 4] = flag; // End flag
+	if (ctrl){
+		test_packet[2] = 0xc0;
+		}
+    else {
+		test_packet[2] = 0x80;
+		}
+		
+    test_packet[3] = test_packet[1]^test_packet[2];
 
-    int res = write(fd, buffer, data_length + 5);
-    if (res == data_length + 5) {
-        fprintf(stderr, "[INFO] Sent data successfully\n");
-        return 0;
+    char bcc2 = ' ';
+    for (int i = 4; i < 18; i++) {
+        bcc2 ^= test_packet[i];
+    }
+
+    int pos = sizeof(test_packet)-2 ;
+
+    test_packet[pos] = bcc2;
+
+    for (int i = 0; i < sizeof(test_packet); i++) {
+        fprintf(stderr, "%x ", test_packet[i]);
+    }
+
+    int res = write(fd,test_packet, sizeof(test_packet));
+    
+    if (res == sizeof(test_packet)) {
+        fprintf(stderr, "[INFO] Sent dummy data packet\n");
     } else {
-        fprintf(stderr, "[ERR] Error sending data\n");
+        fprintf(stderr, "[ERR] Error sending dummy data packet\n");
         return -1;
     }
+
+    return 0;
 }
 
 int main(int argc, char** argv)
@@ -255,11 +263,11 @@ int main(int argc, char** argv)
     char buf[255];
     int i, sum = 0, speed = 0;
 
-    if ( (argc < 2) ||
+    /*if ( (argc < 2) ||
          ((strcmp("/dev/ttyS10", argv[1])!=0) )) {
         printf("Usage:\tnserial SerialPort\n\tex: nserial /dev/ttyS10\n");
         exit(1);
-    }
+    }*/
 
 
     /*
@@ -311,11 +319,14 @@ int main(int argc, char** argv)
     }
 
     const char data[] = "Hello, world!";
-    if (send_data(fd, data, strlen(data)) != 0) {
+    if (send_data(fd, data, strlen(data), 1) != 0) {
         fprintf(stderr, "[ERR] Error in sending data\n");
         exit(-1);
     }
-
+    if (send_data(fd, data, strlen(data), 0) != 0) {
+        fprintf(stderr, "[ERR] Error in sending data\n");
+        exit(-1);
+    }
     if (receive_data(fd) != 0) {
         fprintf(stderr, "[ERR] Error in receiving data\n");
         exit(-1);
