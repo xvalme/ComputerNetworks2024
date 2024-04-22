@@ -21,11 +21,13 @@ int handshake(int fd) {
     char temporary[temporary_size];
     int res;
 
-    char SET_correct [5] = {0x5c, 0x03, 0x08, 0, 0x5c};
-    char UA [5] = {0x5c, 0x03, 0x06, 0, 0x5c};
+    char SET_correct [5] = {0x5c, 0x01, 0x08, 0, 0x5c};
+    char UA [5] = {0x5c, 0x01, 0x06, 0, 0x5c};
     UA[3] = UA[1]^UA[2];
 
     char STATE = 'S';
+
+    fprintf(stderr, "[Handshake] Waiting for reception of SET packet.\n");
 
     while(TRUE){
 
@@ -42,8 +44,8 @@ int handshake(int fd) {
         if (STOP == TRUE){
 
             //fprintf(stderr, "[INFO] Received byte: %x\n", buf[0]);
-
             switch (STATE) {
+                
                 case 'S':
                     {
                     if (buf[0] == SET_correct[0]){
@@ -104,9 +106,9 @@ int handshake(int fd) {
                         STATE = 'Z';
                         temporary[4] = buf[0];
 
-                        printf("[INFO] Received correct SET\n");
+                        printf("[SET] Received correct SET\n");
 
-                        char UA [5] = {0x5c, 0x03, 0x06, "", 0x5c};
+                        char UA [5] = {0x5c, 0x01, 0x06, "", 0x5c};
 
                         UA[3] = UA[1]^UA[2];
 
@@ -120,7 +122,7 @@ int handshake(int fd) {
                                 return -1;
                             }
                         }
-                        printf("[INFO] Sent UA\n");
+                        printf("[UA] Sent UA\n");
 
                         return 1;
                     }
@@ -142,7 +144,7 @@ int handshake(int fd) {
     }
 }
 
-int receive_data_packet(int fd, int current_ctrl_int, char *data_buffer, int *DATA_BUFFER_SIZE) {
+int receive_data_packet(int fd, int current_ctrl_int, char *data_buffer) {
 
     int res;
     char buf[DATA_BUFFER_SIZE];
@@ -157,7 +159,7 @@ int receive_data_packet(int fd, int current_ctrl_int, char *data_buffer, int *DA
     char Ctrl_up = 0xc0;
     char Ctrl_down = 0x80;
 
-    char current_ctrl = Ctrl_down;
+    char current_ctrl = Ctrl_up;
     
     int number_bytes_received = 0;
     char moving_xor = ' ';
@@ -219,11 +221,15 @@ int receive_data_packet(int fd, int current_ctrl_int, char *data_buffer, int *DA
                     else {
                         STATE = 0;
                         memset(temporary, 0, DATA_BUFFER_SIZE);
+                        return -1;
                     }
                     break;
 
                 case 3:
                     printf("In STATE 3\n");
+                    
+                    printf("|%x|%x|\n", buf[0], (temporary[1] ^ temporary[2]));
+
                     if (buf[0] == (temporary[1] ^ temporary[2])) {
                         STATE = 4;
                         temporary[3] = buf[0];
@@ -259,7 +265,7 @@ int receive_data_packet(int fd, int current_ctrl_int, char *data_buffer, int *DA
                     printf("In STATE 41\n");
 
                     if (buf[0] == FLAG) {
-                        printf("Received data correctly: ");
+                        printf("[I] Received data correctly: ");
                         for (int i = 0; i < number_bytes_received; i++) {
                             printf("%c", data[i]);
                         }
@@ -268,7 +274,7 @@ int receive_data_packet(int fd, int current_ctrl_int, char *data_buffer, int *DA
                         return 1;
                     }
                     else {
-                        printf("Failed to receive data\n");
+                        printf("[I] Failed to receive data\n");
                         return -1;
                     }
                     break;
@@ -278,17 +284,58 @@ int receive_data_packet(int fd, int current_ctrl_int, char *data_buffer, int *DA
     }
 }
 
+int send_rr(int fd, int ctrl){
+    char rr [5] = {0x5c, 0x03, 0, 0, 0x5c};
+
+    if (ctrl){
+        rr[2] = 0b00010001;
+    }
+    else {
+        rr[2] = 0b00000001;
+    }
+
+    rr[3] = rr[1]^rr[2];
+
+    int res = write(fd, rr, 5);
+
+    if (res){
+        fprintf(stderr, "[RR] with value %d Sent.\n", ctrl);
+        return 1;
+    }
+    else {
+        return -1;
+    }
+
+}
+
+int send_rej(int fd, int ctrl) {
+    //TODO 
+    fprintf(stderr, "[RR] with value %d Sent.\n", ctrl);
+    
+    return 1;
+}
+
 int receive_multiple_data_packets(int fd){
 
     char data_buffer[DATA_BUFFER_SIZE];
 
     int res;
-    int current_ctrl_int = 0;
+    int current_ctrl_int = 1;
 
     while(TRUE){
-        res = receive_data_packet(fd, current_ctrl_int, data_buffer, &DATA_BUFFER_SIZE);
+        res = receive_data_packet(fd, current_ctrl_int, data_buffer);
         if (res == 1) {
+            //Answer back with RR packet
+
+            send_rr(fd, current_ctrl_int);
+
             current_ctrl_int = !current_ctrl_int;
+
+        }
+        else {
+            // Asnwer back with REJ packet 
+
+            send_rej(fd, current_ctrl_int);
         }
     }
 
@@ -328,16 +375,10 @@ int main(int argc, char** argv)
     newtio.c_iflag = IGNPAR;
     newtio.c_oflag = 0;
 
-    /* set input mode (non-canonical, no echo,...) */
     newtio.c_lflag = 0;
 
     newtio.c_cc[VTIME]    = 0;   /* inter-character timer unused */
     newtio.c_cc[VMIN]     = 1;   /* blocking read until 5 chars received */
-
-    /*
-    VTIME e VMIN devem ser alterados de forma a proteger com um temporizador a
-    leitura do(s) próximo(s) caracter(es)
-    */
 
 
     tcflush(fd, TCIOFLUSH);
