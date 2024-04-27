@@ -218,6 +218,98 @@ int receive_data(int fd) {
     }
     return 0;
 }
+int receive_rr(int fd) {
+    const char flag = 0x5c;
+	const char address = 0x03;
+	const char address_sender = 0x01;
+	const char control1 = 0b00010001;
+	const char control0 = 0b00000001;
+	char control;
+	const char control_ua = 0x06;
+
+    char current_ctrl = 0x80;
+
+
+    char buf[1];
+    StateMachine state = Start_State;
+    int consecutive_flags = 0;
+    char received_data[DATA_BUFFER_SIZE];
+    int data_index = 0;
+
+    while (STOP==FALSE || state != Stop_State) {       /* loop for input */
+        // fprintf(stderr, "[INFO] Initializing RR \n");
+        int res = read(fd,buf,1);   /* returns after 5 chars have been input */
+        // fprintf(stderr, "[INFO] Received byte: %x, %d\n", buf[0], state);
+        if (res < 0) {
+            fprintf(stderr, "[ERR] Error reading from serial port\n");
+            return -1;
+        }
+        // char received_correct = 1;
+        if (buf[0] == flag) {
+            consecutive_flags++;
+        } else {
+            consecutive_flags = 0;
+        }
+
+        if (consecutive_flags == 2) {
+            // two consecutive flags, end of data
+            fprintf(stderr, "[INFO] Received end of data\n");
+            break;
+        }
+    
+        switch (state) {
+            case Start_State:
+                if (buf[0] == flag) {
+                    state = Flag_RCV_State;
+                }
+                break;
+
+            case Flag_RCV_State:
+                if (buf[0] == address) {
+                    state = A_RCV_State;
+                } else {
+                    state = Start_State;
+                }
+                break;
+
+            case A_RCV_State:
+                if (buf[0] == control1) {
+                    control = control1;
+                    state = C_RCV_State;
+                } else if (buf[0] == control0) {
+                    control = control0;
+                    state = C_RCV_State;
+                } else {
+                    return 1;  
+                    state = Start_State;
+                }
+                break;
+
+            case C_RCV_State:
+                if (buf[0] == (address^control))  {
+                    state = BCC_OK_State;
+                } else {
+                    state = Start_State;
+                }
+                break;
+
+            case BCC_OK_State:
+                if (buf[0] == flag) {
+                    fprintf(stderr, "[INFO] Received RR\n");
+                    
+                    char buffer[5]= {flag, address_sender, current_ctrl, address_sender^current_ctrl, flag};
+                    int res = write(fd,buffer,5);
+                    return 0;
+                } else {
+                    state = Start_State;
+                }
+                break;
+            default:
+                break;
+        }
+    }
+    return 0;
+}
 
 int send_data(int fd, const char* data, int data_length, int ctrl) {
 	char test_packet[data_length+6];
@@ -333,14 +425,18 @@ int main(int argc, char** argv)
         fprintf(stderr, "[ERR] Error in sending data\n");
         exit(-1);
     }
-    if (send_data(fd, data, strlen(data), 0) != 0) {
-        fprintf(stderr, "[ERR] Error in sending data\n");
-        exit(-1);
+
+    while (receive_rr(fd) != 0) 
+    {
+        fprintf(stderr, "[ERR] Error in receiving RR\n");
+        if (send_data(fd, data, strlen(data), 1) != 0) {
+            fprintf(stderr, "[ERR] Error in sending data\n");
+            exit(-1);
+        }
     }
-    if (receive_data(fd) != 0) {
-        fprintf(stderr, "[ERR] Error in receiving data\n");
-        exit(-1);
-    }
+    fprintf(stderr, "[INFO] Data sent successfully\n");
+
+    
 
     sleep(1);
     if ( tcsetattr(fd,TCSANOW,&oldtio) == -1) {
