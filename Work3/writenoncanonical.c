@@ -220,25 +220,35 @@ int receive_data(int fd) {
 }
 
 int send_data(int fd, const char* data, int data_length, int ctrl) {
-	char test_packet[] = {0x5c, 0x01, 0 , 0 , 'H', 'e', 'l', 'l', 'o', ',', ' ', 'w', 'o', 'r', 'l', 'd', '!', 'X',0, 0x5c};
-
+	char test_packet[data_length+6];
+    const char flag = 0x5c;
+    const char address = 0x01;
+    
+    char control;
 	if (ctrl){
-		test_packet[2] = 0xc0;
+		control = 0xc0;
 		}
     else {
-		test_packet[2] = 0x80;
+		control = 0x80;
 		}
-		
-    test_packet[3] = test_packet[1]^test_packet[2];
+    
+    /* fill the packet */
+    test_packet[0] = flag;
+    test_packet[1] = address;
+    test_packet[2] = control;
+    test_packet[3] = address^control;
+
+    for (int i = 0; i < data_length; i++) {
+        test_packet[i+4] = data[i];
+    }
 
     char bcc2 = ' ';
-    for (int i = 4; i < 18; i++) {
+    for (int i = 4; i < data_length+4; i++) {
         bcc2 ^= test_packet[i];
     }
 
-    int pos = sizeof(test_packet)-2 ;
-
-    test_packet[pos] = bcc2;
+    test_packet[data_length+4] = bcc2;
+    test_packet[data_length+5] = flag;
 
     for (int i = 0; i < sizeof(test_packet); i++) {
         fprintf(stderr, "%x ", test_packet[i]);
