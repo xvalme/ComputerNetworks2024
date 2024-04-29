@@ -13,7 +13,7 @@
 
 
 #define DATA_BUFFER_SIZE 1024
-#define DEBUG_ALL 1
+#define DEBUG_ALL 0
 
 volatile int STOP=FALSE;
 
@@ -22,6 +22,38 @@ typedef struct {
 } StateMachine;
 
 StateMachine state_machine;
+
+int ByteStuffing(char* str, int strlen) {
+
+    char buffer [DATA_BUFFER_SIZE];
+    int counter = 0;
+
+    for (int i = 0;i++; i<strlen-1){
+
+        if ((str[i] == 0x1b) && (str[i+1] == 0x7c)) {
+            //Flag
+            buffer[counter] = 0x5c;
+            continue;
+        }
+
+        if ((str[i] == 0x1b) && str[i+1] == 0x7D){
+            //Esc
+            buffer[counter] = 0x1b;
+            continue;
+        }
+
+        buffer[counter] = str[i];
+        counter++;
+
+    }
+
+    buffer[counter] = "\0";
+
+    memcpy(str, buffer, counter);
+
+    return counter;
+
+}
 
 void initializeStateMachine() {
     state_machine.current_ctrl = 1;
@@ -260,62 +292,53 @@ int receive_data_packet_(int fd, int current_ctrl_int, char *data_buffer) {
                     break;
                 
                 case 4:
-                    if (DEBUG_ALL) printf("In STATE 4 |Moving XOR: %x\n", moving_xor);
+                    if (DEBUG_ALL) printf("In STATE 4 |Moving XOR: %x| Received %x\n", moving_xor, buf[0]);
                     
                     if (buf[0] == FLAG) {
                         //Check if the last byte is the XOR of the previous bytes
-                        
+
                         if (DEBUG_ALL) printf("Received FLAG\n");
 
                         if (moving_xor == temporary[4]) {
                             printf("[I] Received data correctly: ");
+                            number_bytes_received--;
                             data[number_bytes_received] = '\0';
                             for (int i = 0; i < number_bytes_received; i++) {
-                                printf("%c", data[i]);
+                                if (DEBUG_ALL) printf("%c", data[i]);
                             }
                             printf("\n");
                             memcpy(data_buffer, data, number_bytes_received);
                             return 1;
                         }
                         else{
+                            if (DEBUG_ALL) printf("Resetting state machine.");
                             STATE = 0;
                             memset(temporary, 0, DATA_BUFFER_SIZE);
                             memset(data, 0, DATA_BUFFER_SIZE);
                             moving_xor = ' ';
+                            number_bytes_received = 0;
+                            break;
                         }
                     }
 
+
                     data[number_bytes_received] = buf[0];
                     number_bytes_received++;
-                    moving_xor = data[number_bytes_received-1] ^ moving_xor;
 
                     if (buf[0] != moving_xor) {
                     }
                     else {
+                        if (DEBUG_ALL) fprintf(stderr, "Ready to receive flag\n");
                         temporary[4] = buf[0];
+                        break;
                     }
+
+                    moving_xor = data[number_bytes_received-1] ^ moving_xor;
+
+
 
                     break;
 
-                case 41:
-                    if (DEBUG_ALL) printf("In STATE 41\n");
-
-                    if (buf[0] == FLAG) {
-                        printf("[I] Received data correctly: ");
-                        for (int i = 0; i < number_bytes_received; i++) {
-                            printf("%c", data[i]);
-                        }
-                        printf("\n");
-                        memcpy(data_buffer, data, number_bytes_received);
-                        return 1;
-                    }
-                    else {
-                        STATE = 4;
-                        data[number_bytes_received] = buf[0];
-                        number_bytes_received++;
-                        moving_xor = data[number_bytes_received-1] ^ moving_xor;
-                    }
-                    break;
             }
             STOP = FALSE;
         }
@@ -347,10 +370,27 @@ int send_rr(int fd, int ctrl){
 }
 
 int send_rej(int fd, int ctrl) {
-    //TODO 
-    fprintf(stderr, "[REJ] with value %d Sent.\n", ctrl);
-    
-    return 1;
+
+    char rr [5] = {0x5c, 0x03, 0, 0, 0x5c};
+
+    if (ctrl){
+        rr[2] = 0b00010101;
+    }
+    else {
+        rr[2] = 0b00000101;
+    }
+
+    rr[3] = rr[1]^rr[2];
+
+    int res = write(fd, rr, 5);
+
+    if (res){
+        fprintf(stderr, "[REJ] with value %d Sent.\n", ctrl);
+        return 1;
+    }
+    else {
+        return -1;
+    }
 }
 
 int receive_data(int fd){
@@ -365,6 +405,11 @@ int receive_data(int fd){
             //Answer back with RR packet
 
             send_rr(fd, state_machine.current_ctrl);
+
+            //Bytestuffing 
+            //ByteStuffing(data_buffer, DATA_BUFFER_SIZE);
+
+            fprintf(stderr, "%s\n", data_buffer);
 
             state_machine.current_ctrl = !state_machine.current_ctrl;
 
@@ -444,3 +489,4 @@ int main(int argc, char** argv)
     close(fd);
     return 0;
 }
+
