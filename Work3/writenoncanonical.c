@@ -17,7 +17,7 @@
 volatile int STOP=FALSE;
 
 #define DATA_BUFFER_SIZE 1024
-#define DEBUG_ALL 0
+#define DEBUG_ALL 1
 
 typedef enum {
     Start_State,
@@ -439,7 +439,7 @@ int main(int argc, char** argv)
 
 
     char data2[] = "This is a second message.";
-    if (send_data(fd, data, strlen(data2), 1) != 0) {
+    if (send_data(fd, data2, strlen(data2), 0) != 0) {
         fprintf(stderr, "[ERR] Error in sending data\n");
         exit(-1);
     }
@@ -447,7 +447,7 @@ int main(int argc, char** argv)
     while (receive_rr(fd) != 0) 
     {
         fprintf(stderr, "[ERR] Error in receiving RR\n");
-        if (send_data(fd, data, strlen(data2), 1) != 0) {
+        if (send_data(fd, data2, strlen(data2), 0) != 0) {
             fprintf(stderr, "[ERR] Error in sending data\n");
             exit(-1);
         }

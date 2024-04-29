@@ -218,6 +218,7 @@ int receive_data_packet_(int fd, int current_ctrl_int, char *data_buffer) {
                     else {
                         STATE = 0;
                         memset(temporary, 0, DATA_BUFFER_SIZE);
+                        moving_xor = ' ';
                     }
                     break;
 
@@ -234,6 +235,7 @@ int receive_data_packet_(int fd, int current_ctrl_int, char *data_buffer) {
                     else {
                         STATE = 0;
                         memset(temporary, 0, DATA_BUFFER_SIZE);
+                        moving_xor = ' ';
                         return -1;
                     }
                     break;
@@ -253,25 +255,46 @@ int receive_data_packet_(int fd, int current_ctrl_int, char *data_buffer) {
                     else {
                         STATE = 0;
                         memset(temporary, 0, DATA_BUFFER_SIZE);
+                        moving_xor = ' ';
                     }
                     break;
                 
                 case 4:
-                    if (DEBUG_ALL) printf("In STATE 4\n");
+                    if (DEBUG_ALL) printf("In STATE 4 |Moving XOR: %x\n", moving_xor);
+                    
                     if (buf[0] == FLAG) {
-                        STATE = 0;
-                        memset(temporary, 0, DATA_BUFFER_SIZE);
+                        //Check if the last byte is the XOR of the previous bytes
+                        
+                        if (DEBUG_ALL) printf("Received FLAG\n");
+
+                        if (moving_xor == temporary[4]) {
+                            printf("[I] Received data correctly: ");
+                            data[number_bytes_received] = '\0';
+                            for (int i = 0; i < number_bytes_received; i++) {
+                                printf("%c", data[i]);
+                            }
+                            printf("\n");
+                            memcpy(data_buffer, data, number_bytes_received);
+                            return 1;
+                        }
+                        else{
+                            STATE = 0;
+                            memset(temporary, 0, DATA_BUFFER_SIZE);
+                            memset(data, 0, DATA_BUFFER_SIZE);
+                            moving_xor = ' ';
+                        }
                     }
-                    else if (buf[0] == moving_xor) {
-                        STATE = 41;
-                        temporary[4] = buf[0];
+
+                    data[number_bytes_received] = buf[0];
+                    number_bytes_received++;
+                    moving_xor = data[number_bytes_received-1] ^ moving_xor;
+
+                    if (buf[0] != moving_xor) {
                     }
                     else {
-                        data[number_bytes_received] = buf[0];
-                        number_bytes_received++;
-                        moving_xor = data[number_bytes_received-1] ^ moving_xor;
-                        if (DEBUG_ALL) ("Moving XOR: %x\n", moving_xor);
+                        temporary[4] = buf[0];
                     }
+
                     break;
 
                 case 41:
@@ -287,8 +310,10 @@ int receive_data_packet_(int fd, int current_ctrl_int, char *data_buffer) {
                         return 1;
                     }
                     else {
-                        printf("[I] Failed to receive data\n");
-                        return -1;
+                        STATE = 4;
+                        data[number_bytes_received] = buf[0];
+                        number_bytes_received++;
+                        moving_xor = data[number_bytes_received-1] ^ moving_xor;
                     }
                     break;
             }
@@ -323,7 +348,7 @@ int send_rr(int fd, int ctrl){
 
 int send_rej(int fd, int ctrl) {
     //TODO 
-    fprintf(stderr, "[RR] with value %d Sent.\n", ctrl);
+    fprintf(stderr, "[REJ] with value %d Sent.\n", ctrl);
     
     return 1;
 }
@@ -350,6 +375,8 @@ int receive_data(int fd){
             // Asnwer back with REJ packet 
 
             send_rej(fd, state_machine.current_ctrl);
+
+            return 1;
         }
     }
 
@@ -410,7 +437,7 @@ int main(int argc, char** argv)
     initializeStateMachine();
     handshake(fd);
     receive_data(fd);
-    //receive_data(fd);
+    receive_data(fd);
 
     sleep(1);
     tcsetattr(fd,TCSANOW,&oldtio);
