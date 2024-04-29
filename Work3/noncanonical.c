@@ -196,7 +196,7 @@ int receive_data_packet_(int fd, int current_ctrl_int, char *data_buffer) {
     char data[DATA_BUFFER_SIZE];
     int STATE = 0;
 
-    char FLAG = 0x5c;
+    char FLAG When= 0x5c;
     char Add_S = 0x01;
     char Add_R = 0x03;
     
@@ -257,6 +257,12 @@ int receive_data_packet_(int fd, int current_ctrl_int, char *data_buffer) {
                 case 2:
                     if (DEBUG_ALL) printf("In STATE 2\n");
                     if (DEBUG_ALL) fprintf(stderr, "Current ctrl: %x and received ctrl: %x\n", current_ctrl, buf[0]);
+                    if (buf[0] == 0b00001010){
+                        //DISC packet
+                        STATE = 10;
+                        break;
+                    }
+                    
                     if (buf[0] == current_ctrl) {
                         STATE = 3;
                         temporary[2] = buf[0];
@@ -335,9 +341,31 @@ int receive_data_packet_(int fd, int current_ctrl_int, char *data_buffer) {
 
                     moving_xor = data[number_bytes_received-1] ^ moving_xor;
 
+                    break;
 
+                case 10:
+
+                    if (buf[0] == temporary[1]^temporary[2]) {
+                        STATE = 11;
+                    }
+
+                    else {
+                        STATE = 0;
+                        memset(temporary, 0, DATA_BUFFER_SIZE);
+                    }
 
                     break;
+
+                case 11:
+
+                    if (buf[0] == FLAG) {
+                        return 2;
+                    }
+
+                    else {
+                        STATE = 0;
+                        break;
+                    }
 
             }
             STOP = FALSE;
@@ -393,6 +421,12 @@ int send_rej(int fd, int ctrl) {
     }
 }
 
+int disconect(int fd){
+
+    //Send DISC back
+
+}
+
 int receive_data(int fd){
 
     char data_buffer[DATA_BUFFER_SIZE];
@@ -407,7 +441,7 @@ int receive_data(int fd){
             send_rr(fd, state_machine.current_ctrl);
 
             //Bytestuffing 
-            //ByteStuffing(data_buffer, DATA_BUFFER_SIZE);
+            ByteStuffing(data_buffer, DATA_BUFFER_SIZE);
 
             fprintf(stderr, "%s\n", data_buffer);
 
@@ -415,6 +449,10 @@ int receive_data(int fd){
 
             return 1;
 
+        }
+
+        if (res == 2) {
+            disconnect(fd);
         }
         else {
             // Asnwer back with REJ packet 
@@ -426,6 +464,7 @@ int receive_data(int fd){
     }
 
 }
+
 
 int main(int argc, char** argv)
 {
