@@ -23,7 +23,7 @@ typedef struct {
 
 StateMachine state_machine;
 
-int ByteStuffing(char* str, int* strlen) {
+int ByteStuffing(char* str, int strlen) {
 
     char buffer [DATA_BUFFER_SIZE];
     int counter = 0;
@@ -50,9 +50,8 @@ int ByteStuffing(char* str, int* strlen) {
     buffer[counter] = "\0";
 
     memcpy(str, buffer, counter);
-    strlen = counter; 
 
-    return 1;
+    return counter;
 
 }
 
@@ -305,7 +304,7 @@ int receive_data_packet_(int fd, int current_ctrl_int, char *data_buffer) {
                             number_bytes_received--;
                             data[number_bytes_received] = '\0';
                             for (int i = 0; i < number_bytes_received; i++) {
-                                printf("%c", data[i]);
+                                if (DEBUG_ALL) printf("%c", data[i]);
                             }
                             printf("\n");
                             memcpy(data_buffer, data, number_bytes_received);
@@ -409,6 +408,8 @@ int receive_data(int fd){
 
             //Bytestuffing 
             ByteStuffing(data_buffer, DATA_BUFFER_SIZE);
+
+            fprintf(stderr, "%s\n", data_buffer);
 
             state_machine.current_ctrl = !state_machine.current_ctrl;
 
