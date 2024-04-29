@@ -311,6 +311,34 @@ int receive_rr(int fd) {
     }
     return 0;
 }
+char* byte_stuffing(const char* data, int data_length) {
+    const char ESC = 0x1B;
+    const char flag = 0x5c;
+    char* new_data = (char*)malloc(sizeof(char) * (data_length * 2 + 1)); // Allocate memory for new_data
+
+    if (new_data == NULL) {
+        printf("Memory allocation failed");
+        exit(1); // Exit if memory allocation fails
+    }
+
+    int i = 0;
+    while (i <= data_length) { 
+        if (data[i] == flag) {
+            new_data[i] = ESC;
+            i++;
+            new_data[i] = 0x7C;
+        } else if (data[i] == ESC) {
+            new_data[i] = ESC;
+            i++;
+            new_data[i] = 0x7D;
+        }else {
+            new_data[i] = data[i];
+        }
+        i++;
+    }
+    new_data[i] = '\0'; // Null-terminate the new_data string
+    return new_data;
+}
 
 int send_data(int fd, const char* data, int data_length, int ctrl) {
 	char test_packet[data_length+6];
@@ -331,9 +359,17 @@ int send_data(int fd, const char* data, int data_length, int ctrl) {
     test_packet[2] = control;
     test_packet[3] = address^control;
 
-    for (int i = 0; i < data_length; i++) {
-        test_packet[i+4] = data[i];
+    char *new_data = byte_stuffing(data, data_length);
+
+    int j = 0;
+    while (new_data[j] != '\0') {
+        test_packet[j+4] = new_data[j];
+        j++;
     }
+
+    // for (int i = 0; i < data_length; i++) {
+    //     test_packet[i+4] = data[i];
+    // }
 
     char bcc2 = ' ';
     for (int i = 4; i < data_length+4; i++) {
