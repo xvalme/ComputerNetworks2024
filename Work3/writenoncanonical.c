@@ -17,6 +17,7 @@
 volatile int STOP=FALSE;
 
 #define DATA_BUFFER_SIZE 1024
+#define DEBUG_ALL 0
 
 typedef enum {
     Start_State,
@@ -343,7 +344,7 @@ int send_data(int fd, const char* data, int data_length, int ctrl) {
     test_packet[data_length+5] = flag;
 
     for (int i = 0; i < sizeof(test_packet); i++) {
-        fprintf(stderr, "%x ", test_packet[i]);
+        if (DEBUG_ALL) fprintf(stderr, "%x ", test_packet[i]);
     }
 
     int res = write(fd,test_packet, sizeof(test_packet));
@@ -420,7 +421,7 @@ int main(int argc, char** argv)
         exit(-1);
     }
 
-    const char data[] = "Hello, world!";
+    char data[] = "Hello, world!";
     if (send_data(fd, data, strlen(data), 1) != 0) {
         fprintf(stderr, "[ERR] Error in sending data\n");
         exit(-1);
@@ -436,7 +437,22 @@ int main(int argc, char** argv)
     }
     fprintf(stderr, "[INFO] Data sent successfully\n");
 
-    
+
+    char data2[] = "This is a second message.";
+    if (send_data(fd, data, strlen(data2), 1) != 0) {
+        fprintf(stderr, "[ERR] Error in sending data\n");
+        exit(-1);
+    }
+
+    while (receive_rr(fd) != 0) 
+    {
+        fprintf(stderr, "[ERR] Error in receiving RR\n");
+        if (send_data(fd, data, strlen(data2), 1) != 0) {
+            fprintf(stderr, "[ERR] Error in sending data\n");
+            exit(-1);
+        }
+    }
+    fprintf(stderr, "[INFO] Data sent successfully\n");
 
     sleep(1);
     if ( tcsetattr(fd,TCSANOW,&oldtio) == -1) {

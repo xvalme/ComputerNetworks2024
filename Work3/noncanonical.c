@@ -11,9 +11,21 @@
 #define FALSE 0
 #define TRUE 1
 
-volatile int STOP=FALSE;
 
 #define DATA_BUFFER_SIZE 1024
+#define DEBUG_ALL 1
+
+volatile int STOP=FALSE;
+
+typedef struct {
+    int current_ctrl;
+} StateMachine;
+
+StateMachine state_machine;
+
+void initializeStateMachine() {
+    state_machine.current_ctrl = 1;
+}
 
 int handshake(int fd) {
     char buf[6];
@@ -144,7 +156,7 @@ int handshake(int fd) {
     }
 }
 
-int receive_data_packet(int fd, int current_ctrl_int, char *data_buffer) {
+int receive_data_packet_(int fd, int current_ctrl_int, char *data_buffer) {
 
     int res;
     char buf[DATA_BUFFER_SIZE];
@@ -159,7 +171,7 @@ int receive_data_packet(int fd, int current_ctrl_int, char *data_buffer) {
     char Ctrl_up = 0xc0;
     char Ctrl_down = 0x80;
 
-    char current_ctrl = Ctrl_up;
+    char current_ctrl;
     
     int number_bytes_received = 0;
     char moving_xor = ' ';
@@ -176,7 +188,7 @@ int receive_data_packet(int fd, int current_ctrl_int, char *data_buffer) {
             res = read(fd, buf, 1);   
             buf[res] = 0;       
 
-            printf("Received byte: %x\n", buf[0]);
+            if (DEBUG_ALL) printf("Received byte: %x\n", buf[0]);
 
             if (res) {
                 STOP = TRUE;
@@ -187,7 +199,7 @@ int receive_data_packet(int fd, int current_ctrl_int, char *data_buffer) {
         if (STOP == TRUE) {
             switch (STATE) {
                 case 0:
-                    printf("In STATE 0\n");
+                    if (DEBUG_ALL) printf("In STATE 0\n");
                     if (buf[0] == FLAG) {
                         STATE = 1;
                         temporary[0] = buf[0];
@@ -195,7 +207,7 @@ int receive_data_packet(int fd, int current_ctrl_int, char *data_buffer) {
                     break;
 
                 case 1:
-                    printf("In STATE 1\n");
+                    if (DEBUG_ALL) printf("In STATE 1\n");
                     if (buf[0] == Add_S) {
                         STATE = 2;
                         temporary[1] = buf[0];
@@ -210,7 +222,8 @@ int receive_data_packet(int fd, int current_ctrl_int, char *data_buffer) {
                     break;
 
                 case 2:
-                    printf("In STATE 2\n");
+                    if (DEBUG_ALL) printf("In STATE 2\n");
+                    if (DEBUG_ALL) fprintf(stderr, "Current ctrl: %x and received ctrl: %x\n", current_ctrl, buf[0]);
                     if (buf[0] == current_ctrl) {
                         STATE = 3;
                         temporary[2] = buf[0];
@@ -226,9 +239,9 @@ int receive_data_packet(int fd, int current_ctrl_int, char *data_buffer) {
                     break;
 
                 case 3:
-                    printf("In STATE 3\n");
+                    if (DEBUG_ALL) printf("In STATE 3\n");
                     
-                    printf("|%x|%x|\n", buf[0], (temporary[1] ^ temporary[2]));
+                    if (DEBUG_ALL) printf("|%x|%x|\n", buf[0], (temporary[1] ^ temporary[2]));
 
                     if (buf[0] == (temporary[1] ^ temporary[2])) {
                         STATE = 4;
@@ -244,7 +257,7 @@ int receive_data_packet(int fd, int current_ctrl_int, char *data_buffer) {
                     break;
                 
                 case 4:
-                    printf("In STATE 4\n");
+                    if (DEBUG_ALL) printf("In STATE 4\n");
                     if (buf[0] == FLAG) {
                         STATE = 0;
                         memset(temporary, 0, DATA_BUFFER_SIZE);
@@ -257,12 +270,12 @@ int receive_data_packet(int fd, int current_ctrl_int, char *data_buffer) {
                         data[number_bytes_received] = buf[0];
                         number_bytes_received++;
                         moving_xor = data[number_bytes_received-1] ^ moving_xor;
-                        printf("Moving XOR: %x\n", moving_xor);
+                        if (DEBUG_ALL) ("Moving XOR: %x\n", moving_xor);
                     }
                     break;
 
                 case 41:
-                    printf("In STATE 41\n");
+                    if (DEBUG_ALL) printf("In STATE 41\n");
 
                     if (buf[0] == FLAG) {
                         printf("[I] Received data correctly: ");
@@ -315,27 +328,28 @@ int send_rej(int fd, int ctrl) {
     return 1;
 }
 
-int receive_multiple_data_packets(int fd){
+int receive_data(int fd){
 
     char data_buffer[DATA_BUFFER_SIZE];
 
     int res;
-    int current_ctrl_int = 1;
 
     while(TRUE){
-        res = receive_data_packet(fd, current_ctrl_int, data_buffer);
+        res = receive_data_packet_(fd, state_machine.current_ctrl, data_buffer);
         if (res == 1) {
             //Answer back with RR packet
 
-            send_rr(fd, current_ctrl_int);
+            send_rr(fd, state_machine.current_ctrl);
 
-            current_ctrl_int = !current_ctrl_int;
+            state_machine.current_ctrl = !state_machine.current_ctrl;
+
+            return 1;
 
         }
         else {
             // Asnwer back with REJ packet 
 
-            send_rej(fd, current_ctrl_int);
+            send_rej(fd, state_machine.current_ctrl);
         }
     }
 
@@ -390,8 +404,13 @@ int main(int argc, char** argv)
 
     printf("New termios structure set\n");
 
+    // Our code
+
+
+    initializeStateMachine();
     handshake(fd);
-    receive_multiple_data_packets(fd);
+    receive_data(fd);
+    //receive_data(fd);
 
     sleep(1);
     tcsetattr(fd,TCSANOW,&oldtio);
