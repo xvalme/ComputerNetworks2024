@@ -7,6 +7,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/select.h>
+
 
 #define BAUDRATE B38400
 #define MODEMDEVICE "/dev/ttyS1"
@@ -27,7 +29,9 @@ typedef enum {
     BCC_OK_State,
     Stop_State,
     DATA_RCV_State,
-    BCC2_OK_State
+    BCC2_OK_State,
+    ReceiveData,
+    SendData
 } StateMachine;
 
 int handshake(int fd) {
@@ -123,6 +127,16 @@ int receive_data(int fd) {
 	const char bcc1 = address^control;  
 	const char bcc1_ua = address^control_ua;
 
+     // timeout
+    struct timeval timeout;
+    timeout.tv_sec = 3;
+    timeout.tv_usec = 0;
+
+    fd_set readfds;
+    FD_ZERO(&readfds);
+    FD_SET(fd, &readfds);
+
+
     char buf[1];
     StateMachine state = Start_State;
     int consecutive_flags = 0;
@@ -131,6 +145,17 @@ int receive_data(int fd) {
 
 	
     while (STOP==FALSE || state != Stop_State) {       /* loop for input */
+        int ready = select(fd+1, &readfds, NULL, NULL, &timeout);
+        if (ready == 0) {
+            fprintf(stderr, "[ERR] Timeout waiting for RR\n");
+            
+            state = SendData;
+        }
+        if (ready == -1) {
+            fprintf(stderr, "[ERR] Error waiting for RR\n");
+            return -1;
+        }
+
         int res = read(fd,buf,1);   /* returns after 5 chars have been input */
         if (res < 0) {
             fprintf(stderr, "[ERR] Error reading from serial port\n");
@@ -312,6 +337,35 @@ int receive_rr(int fd) {
     return 0;
 }
 
+char* byte_stuffing(const char* data, int data_length) {
+    const char ESC = 0x1B;
+    const char flag = 0x5c;
+    char* new_data = (char*)malloc(sizeof(char) * (data_length * 2 + 1)); // Allocate memory for new_data
+
+    if (new_data == NULL) {
+        printf("Memory allocation failed");
+        exit(1); // Exit if memory allocation fails
+    }
+
+    int i = 0;
+    while (i <= data_length) { 
+        if (data[i] == flag) {
+            new_data[i] = ESC;
+            i++;
+            new_data[i] = 0x7C;
+        } else if (data[i] == ESC) {
+            new_data[i] = ESC;
+            i++;
+            new_data[i] = 0x7D;
+        }else {
+            new_data[i] = data[i];
+        }
+        i++;
+    }
+    new_data[i] = '\0'; // Null-terminate the new_data string
+    return new_data;
+}
+
 int send_data(int fd, const char* data, int data_length, int ctrl) {
 	char test_packet[data_length+6];
     const char flag = 0x5c;
@@ -331,7 +385,24 @@ int send_data(int fd, const char* data, int data_length, int ctrl) {
     test_packet[2] = control;
     test_packet[3] = address^control;
 
+
+    // 
+    fprintf(stderr, "|| data %s\n", data);
+    char *stuffed_data = byte_stuffing(data, data_length);
+
     for (int i = 0; i < data_length; i++) {
+        fprintf(stderr, "data %x\n", data[i]);
+    }
+    
+    // int j = 0;
+    // while (stuffed_data[j] != '\0') {
+    //     fprintf(stderr, "sutffed data %x\n", stuffed_data[j]);
+    //     test_packet[j+4] = stuffed_data[j];
+    //     j++;
+    // }
+
+    for (int i = 0; i < data_length; i++) {
+
         test_packet[i+4] = data[i];
     }
 
@@ -415,6 +486,7 @@ int main(int argc, char** argv)
 
     printf("New termios structure set\n");
 
+    /** TO DO send msg, wait */
 
     if (handshake(fd) != 0) {
         fprintf(stderr, "[ERR] Error in handshake\n");
@@ -426,11 +498,11 @@ int main(int argc, char** argv)
         fprintf(stderr, "[ERR] Error in sending data\n");
         exit(-1);
     }
-
-    while (receive_rr(fd) != 0) 
+  
+    if (receive_rr(fd) != 0) 
     {
         fprintf(stderr, "[ERR] Error in receiving RR\n");
-        if (send_data(fd, data, strlen(data), 1) != 0) {
+        if (send_data(fd, data, strlen(data), 0) != 0) {
             fprintf(stderr, "[ERR] Error in sending data\n");
             exit(-1);
         }
@@ -439,7 +511,7 @@ int main(int argc, char** argv)
 
 
     char data2[] = "This is a second message.";
-    if (send_data(fd, data2, strlen(data2), 0) != 0) {
+    if (send_data(fd, data, strlen(data2), 1) != 0) {
         fprintf(stderr, "[ERR] Error in sending data\n");
         exit(-1);
     }
@@ -447,7 +519,7 @@ int main(int argc, char** argv)
     while (receive_rr(fd) != 0) 
     {
         fprintf(stderr, "[ERR] Error in receiving RR\n");
-        if (send_data(fd, data2, strlen(data2), 0) != 0) {
+        if (send_data(fd, data, strlen(data2), 0) != 0) {
             fprintf(stderr, "[ERR] Error in sending data\n");
             exit(-1);
         }
