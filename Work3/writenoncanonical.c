@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
+#include <unistd.h>
 
 #define BAUDRATE B38400
 #define MODEMDEVICE "/dev/ttyS1"
@@ -434,6 +435,14 @@ int send_data(int fd, const char* data, int data_length, int ctrl) {
 int send_msg(int fd, const char* msg) {
     int retr;
 
+    // timeout
+    struct timeval timeout;
+    timeout.tv_sec = 3;
+    timeout.tv_usec = 0;
+    fd_set readfds;
+    int ready;
+
+
     senderSM state = Send0_State;
     while (state != Stop_SM_State) {
         // fprintf(stderr, "[DEBUGGGG] State: %d, msg %s\n", state, msg);
@@ -445,7 +454,19 @@ int send_msg(int fd, const char* msg) {
             state = ACK0_State;
             break;
         case ACK0_State:
-            // TODO: timeout
+            FD_ZERO(&readfds);
+            FD_SET(fd, &readfds);
+            ready = select(fd+1, &readfds, NULL, NULL, &timeout);
+            if (ready == 0) {
+                fprintf(stderr, "[ERR] Timeout waiting for RR\n");
+                sleep(1);
+                state = Send0_State;
+                break;
+            }
+            if (ready == -1) {
+                fprintf(stderr, "[ERR] Error waiting for RR\n");
+                return -1;
+            }
             retr = receive(fd);
             // fprintf(stderr, "[DEBUG] Received RR: %d\n", retr);
             if (retr == control_rej) {
@@ -459,7 +480,19 @@ int send_msg(int fd, const char* msg) {
             state = ACK1_State;
             break;
         case ACK1_State:
-            // TODO: timeout
+            FD_ZERO(&readfds);
+            FD_SET(fd, &readfds);
+            ready = select(fd+1, &readfds, NULL, NULL, &timeout);
+            if (ready == 0) {
+                fprintf(stderr, "[ERR] Timeout waiting for response\n");
+                sleep(1);
+                state = Send0_State;
+                break;
+            }
+            if (ready == -1) {
+                fprintf(stderr, "[ERR] Error waiting for response\n");
+                return -1;
+            }
             if (receive(fd) == control_rej) {
                 state = Stop_SM_State;
             } else {
