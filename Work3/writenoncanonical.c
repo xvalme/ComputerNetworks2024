@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdbool.h>
 
 #define BAUDRATE B38400
 #define MODEMDEVICE "/dev/ttyS1"
@@ -29,6 +30,20 @@ typedef enum {
     DATA_RCV_State,
     BCC2_OK_State
 } StateMachine;
+
+typedef enum {
+    Send0_State,
+    ACK0_State,
+    Send1_State,
+    ACK1_State,
+    Stop_SM_State
+} senderSM;
+
+
+enum ControlField{
+    control_rr,
+    control_rej
+};
 
 int handshake(int fd) {
     fprintf(stderr, "[INFO] Initializing Handshake \n");
@@ -219,16 +234,21 @@ int receive_data(int fd) {
     }
     return 0;
 }
-int receive_rr(int fd) {
+int receive(int fd) {
     const char flag = 0x5c;
 	const char address = 0x03;
 	const char address_sender = 0x01;
-	const char control1 = 0b00010001;
-	const char control0 = 0b00000001;
+	const char control_rr_1 = 0b00010001;
+	const char control_rr_0 = 0b00000001;
+    const char control_rej_1 = 0b00010101;
+    const char control_rej_0 = 0b00000101;
 	char control;
 	const char control_ua = 0x06;
 
     char current_ctrl = 0x80;
+
+    bool rr = false;
+    bool rej = false;
 
 
     char buf[1];
@@ -274,14 +294,24 @@ int receive_rr(int fd) {
                 break;
 
             case A_RCV_State:
-                if (buf[0] == control1) {
-                    control = control1;
+                if (buf[0] == control_rr_1) {
+                    control = control_rr_1;
+                    rr = true;
                     state = C_RCV_State;
-                } else if (buf[0] == control0) {
-                    control = control0;
+                } else if (buf[0] == control_rr_0) {
+                    control = control_rr_0;
+                    rr = true;
+                    state = C_RCV_State;
+                } else if (buf[0] == control_rej_1) {
+                    control = control_rej_1;
+                    rej = true;
+                    state = C_RCV_State;
+                } else if (buf[0] == control_rej_0) {
+                    control = control_rej_0;
+                    rej = true;
                     state = C_RCV_State;
                 } else {
-                    return 1;  
+                    exit(-1);  
                     state = Start_State;
                 }
                 break;
@@ -296,11 +326,17 @@ int receive_rr(int fd) {
 
             case BCC_OK_State:
                 if (buf[0] == flag) {
-                    fprintf(stderr, "[INFO] Received RR\n");
                     
                     char buffer[5]= {flag, address_sender, current_ctrl, address_sender^current_ctrl, flag};
                     int res = write(fd,buffer,5);
-                    return 0;
+                    if (rr == true) {
+                        fprintf(stderr, "[INFO] Received RR\n");
+                        return 0;
+                    }
+                    if (rej == true) {
+                        fprintf(stderr, "[INFO] Received REJ\n");
+                        return 1;
+                    }
                 } else {
                     state = Start_State;
                 }
@@ -309,7 +345,7 @@ int receive_rr(int fd) {
                 break;
         }
     }
-    return 0;
+    return -1;
 }
 char* byte_stuffing(const char* data, int data_length) {
     const char ESC = 0x1B;
@@ -395,6 +431,52 @@ int send_data(int fd, const char* data, int data_length, int ctrl) {
     return 0;
 }
 
+int send_msg(int fd, const char* msg) {
+    int retr;
+
+    senderSM state = Send0_State;
+    while (state != Stop_SM_State) {
+        // fprintf(stderr, "[DEBUGGGG] State: %d, msg %s\n", state, msg);
+
+        switch (state)
+        {
+        case Send0_State:
+            send_data(fd, msg, strlen(msg), 0);
+            state = ACK0_State;
+            break;
+        case ACK0_State:
+            // TODO: timeout
+            retr = receive(fd);
+            // fprintf(stderr, "[DEBUG] Received RR: %d\n", retr);
+            if (retr == control_rej) {
+                state = Send1_State;
+            } else {
+                state = Send0_State;
+            }
+            break;
+        case Send1_State:
+            send_data(fd, msg, strlen(msg), 1);
+            state = ACK1_State;
+            break;
+        case ACK1_State:
+            // TODO: timeout
+            if (receive(fd) == control_rej) {
+                state = Stop_SM_State;
+            } else {
+                state = Send1_State;
+            }
+            break;
+        case Stop_SM_State:
+            return 0;
+            break;
+        
+        default:
+            break;
+        }
+    }
+    return 0;
+}
+
 int main(int argc, char** argv)
 {
     int fd,c, res;
@@ -458,36 +540,38 @@ int main(int argc, char** argv)
     }
 
     char data[] = "Hello, world!";
-    if (send_data(fd, data, strlen(data), 1) != 0) {
-        fprintf(stderr, "[ERR] Error in sending data\n");
-        exit(-1);
-    }
+    send_msg(fd, data);
 
-    while (receive_rr(fd) != 0) 
-    {
-        fprintf(stderr, "[ERR] Error in receiving RR\n");
-        if (send_data(fd, data, strlen(data), 1) != 0) {
-            fprintf(stderr, "[ERR] Error in sending data\n");
-            exit(-1);
-        }
-    }
-    fprintf(stderr, "[INFO] Data sent successfully\n");
+    // if (send_data(fd, data, strlen(data), 1) != 0) {
+    //     fprintf(stderr, "[ERR] Error in sending data\n");
+    //     exit(-1);
+    // }
+
+    // while (receive(fd) != 0) 
+    // {
+    //     fprintf(stderr, "[ERR] Error in receiving RR\n");
+    //     if (send_data(fd, data, strlen(data), 1) != 0) {
+    //         fprintf(stderr, "[ERR] Error in sending data\n");
+    //         exit(-1);
+    //     }
+    // }
+    // fprintf(stderr, "[INFO] Data sent successfully\n");
 
 
-    char data2[] = "This is a second message.";
-    if (send_data(fd, data2, strlen(data2), 0) != 0) {
-        fprintf(stderr, "[ERR] Error in sending data\n");
-        exit(-1);
-    }
+    // char data2[] = "This is a second message.";
+    // if (send_data(fd, data2, strlen(data2), 0) != 0) {
+    //     fprintf(stderr, "[ERR] Error in sending data\n");
+    //     exit(-1);
+    // }
 
-    while (receive_rr(fd) != 0) 
-    {
-        fprintf(stderr, "[ERR] Error in receiving RR\n");
-        if (send_data(fd, data2, strlen(data2), 0) != 0) {
-            fprintf(stderr, "[ERR] Error in sending data\n");
-            exit(-1);
-        }
-    }
+    // while (receive(fd) != 0) 
+    // {
+    //     fprintf(stderr, "[ERR] Error in receiving RR\n");
+    //     if (send_data(fd, data2, strlen(data2), 0) != 0) {
+    //         fprintf(stderr, "[ERR] Error in sending data\n");
+    //         exit(-1);
+    //     }
+    // }
     fprintf(stderr, "[INFO] Data sent successfully\n");
 
     sleep(1);
