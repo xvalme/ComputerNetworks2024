@@ -18,8 +18,13 @@
 
 volatile int STOP=FALSE;
 
+/* toggle the control bit value */
+#define TOGGLE_CTRL(var) ((var) == 0 ? (var) = 1 : ((var) = 0))
+
 #define DATA_BUFFER_SIZE 1024
 #define DEBUG_ALL 1
+
+int ctrl = 0;
 
 typedef enum {
     Start_State,
@@ -251,6 +256,7 @@ int receive(int fd) {
     bool rr = false;
     bool rej = false;
 
+    int ctrl_get = ctrl;
 
     char buf[1];
     StateMachine state = Start_State;
@@ -297,18 +303,22 @@ int receive(int fd) {
             case A_RCV_State:
                 if (buf[0] == control_rr_1) {
                     control = control_rr_1;
+                    ctrl_get = 1;
                     rr = true;
                     state = C_RCV_State;
                 } else if (buf[0] == control_rr_0) {
                     control = control_rr_0;
+                    ctrl_get = 0;
                     rr = true;
                     state = C_RCV_State;
                 } else if (buf[0] == control_rej_1) {
                     control = control_rej_1;
+                    ctrl_get = 1;
                     rej = true;
                     state = C_RCV_State;
                 } else if (buf[0] == control_rej_0) {
                     control = control_rej_0;
+                    ctrl_get = 0;
                     rej = true;
                     state = C_RCV_State;
                 } else {
@@ -327,7 +337,8 @@ int receive(int fd) {
 
             case BCC_OK_State:
                 if (buf[0] == flag) {
-                    
+                    if (ctrl_get == ctrl) return -1;
+                    TOGGLE_CTRL(ctrl);
                     char buffer[5]= {flag, address_sender, current_ctrl, address_sender^current_ctrl, flag};
                     int res = write(fd,buffer,5);
                     if (rr == true) {
@@ -450,7 +461,7 @@ int send_msg(int fd, const char* msg) {
         switch (state)
         {
         case Send0_State:
-            send_data(fd, msg, strlen(msg), 0);
+            send_data(fd, msg, strlen(msg), ctrl);
             state = ACK0_State;
             break;
         case ACK0_State:
@@ -471,12 +482,15 @@ int send_msg(int fd, const char* msg) {
             // fprintf(stderr, "[DEBUG] Received RR: %d\n", retr);
             if (retr == control_rej) {
                 state = Send1_State;
+            } else if (retr == control_rr) {
+                state = Send0_State;
             } else {
+                // some error
                 state = Send0_State;
             }
             break;
         case Send1_State:
-            send_data(fd, msg, strlen(msg), 1);
+            send_data(fd, msg, strlen(msg), ctrl);
             state = ACK1_State;
             break;
         case ACK1_State:
@@ -493,12 +507,15 @@ int send_msg(int fd, const char* msg) {
                 fprintf(stderr, "[ERR] Error waiting for response\n");
                 return -1;
             }
-            if (receive(fd) == control_rej) {
+
+            if (retr == control_rej) {
                 state = Stop_SM_State;
+            } else if (retr == control_rr) {
+                state = Send1_State;
             } else {
+                // some error
                 state = Send1_State;
             }
-            break;
         case Stop_SM_State:
             return 0;
             break;
