@@ -461,6 +461,7 @@ int send_msg(int fd, const char* msg) {
         switch (state)
         {
         case Send0_State:
+            fprintf(stderr, "[INFO] Sending data with ctrl %d\n", ctrl);
             send_data(fd, msg, strlen(msg), ctrl);
             state = ACK0_State;
             break;
@@ -481,15 +482,16 @@ int send_msg(int fd, const char* msg) {
             retr = receive(fd);
             // fprintf(stderr, "[DEBUG] Received RR: %d\n", retr);
             if (retr == control_rej) {
-                state = Send1_State;
-            } else if (retr == control_rr) {
                 state = Send0_State;
+            } else if (retr == control_rr) {
+                state = Send1_State;
             } else {
                 // some error
                 state = Send0_State;
             }
             break;
         case Send1_State:
+            fprintf(stderr, "[INFO] Sending data with ctrl %d\n", ctrl);
             send_data(fd, msg, strlen(msg), ctrl);
             state = ACK1_State;
             break;
@@ -509,9 +511,9 @@ int send_msg(int fd, const char* msg) {
             }
 
             if (retr == control_rej) {
-                state = Stop_SM_State;
-            } else if (retr == control_rr) {
                 state = Send1_State;
+            } else if (retr == control_rr) {
+                state = Stop_SM_State;
             } else {
                 // some error
                 state = Send1_State;
