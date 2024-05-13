@@ -301,6 +301,7 @@ int receive(int fd) {
                 break;
 
             case A_RCV_State:
+                if (DEBUG_ALL) fprintf(stderr, "Buffer: %04x\n", buf[0]);
                 if (buf[0] == control_rr_1) {
                     control = control_rr_1;
                     ctrl_get = 1;
@@ -337,10 +338,11 @@ int receive(int fd) {
 
             case BCC_OK_State:
                 if (buf[0] == flag) {
-                    if (ctrl_get == ctrl) return -1;
+                    if (ctrl_get != ctrl) return -1;
+
                     TOGGLE_CTRL(ctrl);
                     char buffer[5]= {flag, address_sender, current_ctrl, address_sender^current_ctrl, flag};
-                    int res = write(fd,buffer,5);
+                    //int res = write(fd,buffer,5);
                     if (rr == true) {
                         fprintf(stderr, "[INFO] Received RR\n");
                         return 0;
@@ -480,16 +482,21 @@ int send_msg(int fd, const char* msg) {
                 return -1;
             }
             retr = receive(fd);
-            // fprintf(stderr, "[DEBUG] Received RR: %d\n", retr);
+
+
+            if (DEBUG_ALL) fprintf(stderr, "[DEBUG] Received RR: %d\n", retr);
+
             if (retr == control_rej) {
                 state = Send0_State;
             } else if (retr == control_rr) {
-                state = Send1_State;
+                state = Stop_SM_State;
+                return 0;
             } else {
                 // some error
                 state = Send0_State;
             }
             break;
+
         case Send1_State:
             fprintf(stderr, "[INFO] Sending data with ctrl %d\n", ctrl);
             send_data(fd, msg, strlen(msg), ctrl);
@@ -514,11 +521,13 @@ int send_msg(int fd, const char* msg) {
                 state = Send1_State;
             } else if (retr == control_rr) {
                 state = Stop_SM_State;
+                return 0;
             } else {
                 // some error
                 state = Send1_State;
             }
         case Stop_SM_State:
+            if (DEBUG_ALL) fprintf(stderr, "[INFO] Stopping sender state machine\n");
             return 0;
             break;
         
@@ -592,7 +601,19 @@ int main(int argc, char** argv)
     }
 
     char data[] = "Hello, world!";
+    char data1[] = "How are you?";
+    char data2[] = "THis is a test message.";
+    char data3[] = "Upsi.";
+    char data4[] = "Bye!";
+    char data5[] = "THis is a test message that is even longer.";
+
     send_msg(fd, data);
+    send_msg(fd, data1);
+    send_msg(fd, data2);
+    send_msg(fd, data3);
+    send_msg(fd, data4);
+    send_msg(fd, data5);
+
 
     // if (send_data(fd, data, strlen(data), 1) != 0) {
     //     fprintf(stderr, "[ERR] Error in sending data\n");

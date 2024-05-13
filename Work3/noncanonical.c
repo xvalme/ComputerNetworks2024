@@ -56,7 +56,7 @@ int ByteStuffing(char* str, int strlen) {
 }
 
 void initializeStateMachine() {
-    state_machine.current_ctrl = 1;
+    state_machine.current_ctrl = 0;
 }
 
 int handshake(int fd) {
@@ -196,7 +196,7 @@ int receive_data_packet_(int fd, int current_ctrl_int, char *data_buffer) {
     char data[DATA_BUFFER_SIZE];
     int STATE = 0;
 
-    char FLAG When= 0x5c;
+    char FLAG = 0x5c;
     char Add_S = 0x01;
     char Add_R = 0x03;
     
@@ -306,13 +306,13 @@ int receive_data_packet_(int fd, int current_ctrl_int, char *data_buffer) {
                         if (DEBUG_ALL) printf("Received FLAG\n");
 
                         if (moving_xor == temporary[4]) {
-                            printf("[I] Received data correctly: ");
+                            printf("[I] Received data correctly.\n");
                             number_bytes_received--;
                             data[number_bytes_received] = '\0';
                             for (int i = 0; i < number_bytes_received; i++) {
                                 if (DEBUG_ALL) printf("%c", data[i]);
                             }
-                            printf("\n");
+                            if (DEBUG_ALL) printf("\n");
                             memcpy(data_buffer, data, number_bytes_received);
                             return 1;
                         }
@@ -421,7 +421,7 @@ int send_rej(int fd, int ctrl) {
     }
 }
 
-int disconect(int fd){
+int disconnect(int fd){
 
     //Send DISC back
 
@@ -432,6 +432,11 @@ int receive_data(int fd){
     char data_buffer[DATA_BUFFER_SIZE];
 
     int res;
+
+    fprintf(stderr, "--------------\n");
+
+    memset(data_buffer, 0, DATA_BUFFER_SIZE);
+
 
     while(TRUE){
         res = receive_data_packet_(fd, state_machine.current_ctrl, data_buffer);
@@ -445,6 +450,8 @@ int receive_data(int fd){
 
             fprintf(stderr, "%s\n", data_buffer);
 
+            fprintf(stderr, "--------------\n");
+
             state_machine.current_ctrl = !state_machine.current_ctrl;
 
             return 1;
@@ -452,8 +459,8 @@ int receive_data(int fd){
         }
 
         if (res == 2) {
-            disconnect(fd);
-        }
+                disconnect(fd);
+            }
         else {
             // Asnwer back with REJ packet 
 
@@ -464,7 +471,6 @@ int receive_data(int fd){
     }
 
 }
-
 
 int main(int argc, char** argv)
 {
@@ -520,8 +526,10 @@ int main(int argc, char** argv)
 
     initializeStateMachine();
     handshake(fd);
-    receive_data(fd);
-    receive_data(fd);
+
+    while (1) {
+        receive_data(fd);
+    }
 
     sleep(1);
     tcsetattr(fd,TCSANOW,&oldtio);
