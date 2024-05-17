@@ -421,10 +421,249 @@ int send_rej(int fd, int ctrl) {
     }
 }
 
+int verify_if_ua_received(int fd){
+    char buf[6];
+    int temporary_size = 6;
+    char temporary[temporary_size];
+    int res;
+
+    char SET_correct [5] = {0x5c, 0x01, 0x06, 0, 0x5c};
+
+    char STATE = 'S';
+
+    fprintf(stderr, "[Disconnect] Waiting for reception of UA packet.\n");
+
+    while(TRUE){
+
+        if (STOP == FALSE) {
+            res = read(fd,buf,1);   
+            buf[res]=0;       
+
+            if (res) {
+                STOP = TRUE;
+                continue;
+            } 
+        }
+
+        if (STOP == TRUE){
+
+            //fprintf(stderr, "[INFO] Received byte: %x\n", buf[0]);
+            switch (STATE) {
+                
+                case 'S':
+                    {
+                    if (buf[0] == SET_correct[0]){
+                        STATE = 'F';
+                        temporary[0] = buf[0];
+                    }
+                    break;
+                    }
+                case 'F':
+                    {
+                    if (buf[0] == SET_correct[0]){
+                        STATE = 'F';
+                    }
+                    else if (buf[0] == SET_correct[1]){
+                        STATE = 'A';
+                        temporary[1] = buf[0];
+                    }
+                    else {
+                        STATE = 'S';
+                        memset (temporary, 0, temporary_size );
+                    }
+
+                    break;
+                    }
+                case 'A':
+                    if (buf[0] == SET_correct[2]){
+                        STATE = 'C';
+                        temporary[2] = buf[0];
+                    }
+                    else if (buf[0] == temporary[1]) {
+                        STATE = 'F';
+                    }
+                    else {
+                        STATE = 'S';
+                        memset (temporary, 0, temporary_size );
+                    }
+
+                    break;
+                case 'C':
+                    {
+                    char xor = temporary[1]^temporary[2];
+
+                    if (buf[0] == xor) {
+                        STATE = 'B';
+                        temporary[3] = buf[0];
+                    }
+                    else if (buf[0] == temporary[1]) {
+                        STATE = 'F';
+                    }
+                    else {
+                        STATE = 'S';
+                        memset (temporary, 0, temporary_size );
+                    }
+                    break;
+                    }
+                case 'B':
+                    if (buf[0] == SET_correct[4]) {
+                        STATE = 'Z';
+                        temporary[4] = buf[0];
+
+                        printf("[DISC] Received correct UA\n");
+
+                        return 1;
+                    }
+
+                    else {
+                        STATE = 'F';
+                        memset (temporary, 0, temporary_size );
+                    }
+
+                    break;
+
+                default:
+                    fprintf(stderr, "%c\n", STATE);            
+            }
+
+            STOP = FALSE;
+            continue;
+        }
+    }
+}
+
 int disconnect(int fd){
+    char buf[6];
+    int temporary_size = 6;
+    char temporary[temporary_size];
+    int res;
 
-    //Send DISC back
+    char SET_correct [5] = {0x5c, 0x01, 0x0A, 0, 0x5c};
+    char UA [5] = {0x5c, 0x01, 0x0A, 0, 0x5c};
+    UA[3] = UA[1]^UA[2];
 
+    char STATE = 'S';
+
+    fprintf(stderr, "[Disconnect] Waiting for reception of DISC packet.\n");
+
+    while(TRUE){
+
+        if (STOP == FALSE) {
+            res = read(fd,buf,1);   
+            buf[res]=0;       
+
+            if (res) {
+                STOP = TRUE;
+                continue;
+            } 
+        }
+
+        if (STOP == TRUE){
+
+            //fprintf(stderr, "[INFO] Received byte: %x\n", buf[0]);
+            switch (STATE) {
+                
+                case 'S':
+                    {
+                    if (buf[0] == SET_correct[0]){
+                        STATE = 'F';
+                        temporary[0] = buf[0];
+                    }
+                    break;
+                    }
+                case 'F':
+                    {
+                    if (buf[0] == SET_correct[0]){
+                        STATE = 'F';
+                    }
+                    else if (buf[0] == SET_correct[1]){
+                        STATE = 'A';
+                        temporary[1] = buf[0];
+                    }
+                    else {
+                        STATE = 'S';
+                        memset (temporary, 0, temporary_size );
+                    }
+
+                    break;
+                    }
+                case 'A':
+                    if (buf[0] == SET_correct[2]){
+                        STATE = 'C';
+                        temporary[2] = buf[0];
+                    }
+                    else if (buf[0] == temporary[1]) {
+                        STATE = 'F';
+                    }
+                    else {
+                        STATE = 'S';
+                        memset (temporary, 0, temporary_size );
+                    }
+
+                    break;
+                case 'C':
+                    {
+                    char xor = temporary[1]^temporary[2];
+
+                    if (buf[0] == xor) {
+                        STATE = 'B';
+                        temporary[3] = buf[0];
+                    }
+                    else if (buf[0] == temporary[1]) {
+                        STATE = 'F';
+                    }
+                    else {
+                        STATE = 'S';
+                        memset (temporary, 0, temporary_size );
+                    }
+                    break;
+                    }
+                case 'B':
+                    if (buf[0] == SET_correct[4]) {
+                        STATE = 'Z';
+                        temporary[4] = buf[0];
+
+                        printf("[DISC] Received correct DISC\n");
+
+                        char UA [5] = {0x5c, 0x01, 0x0A, "", 0x5c};
+
+                        UA[3] = UA[1]^UA[2];
+
+                        int res = write(fd, UA, 5);
+                        int count = 2; 
+
+                        while (res != 5) {
+                            res = write(fd, UA, 5);
+                            count--;
+                            if (!count) {
+                                return -1;
+                            }
+                        }
+                        printf("[DISC] Sent DISC back. Waiting for UA paccket.\n");
+
+                        if (verify_if_ua_received(fd)) {
+                            return 1;
+                        }
+                        else {
+                            return -1;
+                        }
+                    }
+
+                    else {
+                        STATE = 'F';
+                        memset (temporary, 0, temporary_size );
+                    }
+
+                    break;
+
+                default:
+                    fprintf(stderr, "%c\n", STATE);            
+            }
+
+            STOP = FALSE;
+            continue;
+        }
+    }
 }
 
 int receive_data(int fd){
