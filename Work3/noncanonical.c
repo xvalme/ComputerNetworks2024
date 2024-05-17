@@ -11,11 +11,32 @@
 #define FALSE 0
 #define TRUE 1
 
-
 #define DATA_BUFFER_SIZE 1024
 #define DEBUG_ALL 0
 
 volatile int STOP=FALSE;
+
+typedef struct linkLayer{
+
+    char serialPort[50];
+    int role; 
+    int baudRate;
+    int numTries;
+    int timeOut;
+    
+} linkLayer;
+
+//ROLE
+#define NOT_DEFINED -1
+#define TRANSMITTER 0
+#define RECEIVER 1
+#define MAX_PAYLOAD_SIZE 1000
+
+//CONNECTION deafault values
+#define BAUDRATE_DEFAULT B38400
+#define MAX_RETRANSMISSIONS_DEFAULT 3
+#define TIMEOUT_DEFAULT 4
+#define _POSIX_SOURCE 1 /* POSIX compliant source */
 
 typedef struct {
     int current_ctrl;
@@ -314,7 +335,7 @@ int receive_data_packet_(int fd, int current_ctrl_int, char *data_buffer) {
                             }
                             if (DEBUG_ALL) printf("\n");
                             memcpy(data_buffer, data, number_bytes_received);
-                            return 1;
+                            return number_bytes_received;
                         }
                         else{
                             if (DEBUG_ALL) printf("Resetting state machine.");
@@ -359,7 +380,7 @@ int receive_data_packet_(int fd, int current_ctrl_int, char *data_buffer) {
                 case 11:
 
                     if (buf[0] == FLAG) {
-                        return 2;
+                        return -2;
                     }
 
                     else {
@@ -666,9 +687,7 @@ int disconnect(int fd){
     }
 }
 
-int receive_data(int fd){
-
-    char data_buffer[DATA_BUFFER_SIZE];
+int receive_data(int fd, char *data_buffer){
 
     int res;
 
@@ -679,7 +698,7 @@ int receive_data(int fd){
 
     while(TRUE){
         res = receive_data_packet_(fd, state_machine.current_ctrl, data_buffer);
-        if (res == 1) {
+        if (res) {
             //Answer back with RR packet
 
             send_rr(fd, state_machine.current_ctrl);
@@ -693,11 +712,11 @@ int receive_data(int fd){
 
             state_machine.current_ctrl = !state_machine.current_ctrl;
 
-            return 1;
+            return res;
 
         }
 
-        if (res == 2) {
+        if (res == -2) {
                 disconnect(fd);
             }
         else {
@@ -776,3 +795,27 @@ int main(int argc, char** argv)
     return 0;
 }
 
+int llread(unsigned char * buffer){
+
+    int res = receive_data(fd, buffer);
+
+    if (res == -1) {
+        return -1;
+    }
+
+    return res;
+
+}
+
+int llopen(linkLayer connectionParameters) {
+
+    int ret = handshake(fd);
+
+    if (ret == 1) {
+        return 1;
+    }
+    else {
+        return -1;
+    }
+
+}
