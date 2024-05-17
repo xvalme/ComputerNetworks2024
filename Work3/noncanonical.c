@@ -6,12 +6,9 @@
 #include <termios.h>
 #include <stdio.h>
 
-#define BAUDRATE B38400
-#define _POSIX_SOURCE 1 /* POSIX compliant source */
 #define FALSE 0
 #define TRUE 1
 
-#define DATA_BUFFER_SIZE 1024
 #define DEBUG_ALL 0
 
 volatile int STOP=FALSE;
@@ -30,13 +27,19 @@ typedef struct linkLayer{
 #define NOT_DEFINED -1
 #define TRANSMITTER 0
 #define RECEIVER 1
+
 #define MAX_PAYLOAD_SIZE 1000
+#define DATA_BUFFER_SIZE (MAX_PAYLOAD_SIZE * 2 + 10) 
 
 //CONNECTION deafault values
 #define BAUDRATE_DEFAULT B38400
 #define MAX_RETRANSMISSIONS_DEFAULT 3
 #define TIMEOUT_DEFAULT 4
 #define _POSIX_SOURCE 1 /* POSIX compliant source */
+
+//TODO 
+//Add timeout to the read function
+//Add information to linklayer
 
 typedef struct {
     int current_ctrl;
@@ -809,9 +812,14 @@ int llread(unsigned char * buffer){
 
 int llopen(linkLayer connectionParameters) {
 
+    if (connectionParameters.role == TRANSMITTER) {
+       -1
+    }
+
     int ret = handshake(fd);
 
     if (ret == 1) {
+
         return 1;
     }
     else {
