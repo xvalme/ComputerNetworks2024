@@ -15,13 +15,15 @@ volatile int STOP=FALSE;
 
 typedef struct linkLayer{
 
-    char serialPort[50];
-    int role; 
-    int baudRate;
-    int numTries;
+    char serialPort[50]; //
+    int role;  //
+    int baudRate; // 
+    int numTries; 
     int timeOut;
     
 } linkLayer;
+
+#define BAUDRATE B38400
 
 //ROLE
 #define NOT_DEFINED -1
@@ -39,12 +41,14 @@ typedef struct linkLayer{
 
 //TODO 
 //Add timeout to the read function
-//Add information to linklayer
 
 typedef struct {
     int current_ctrl;
 } StateMachine;
 
+int fd;
+
+struct termios oldtio,newtio;
 StateMachine state_machine;
 
 int ByteStuffing(char* str, int strlen) {
@@ -735,7 +739,7 @@ int receive_data(int fd, char *data_buffer){
 
 int main(int argc, char** argv)
 {
-    int fd,c, res;
+    int c, res;
     struct termios oldtio,newtio;
     char buf[255];
 
@@ -789,7 +793,8 @@ int main(int argc, char** argv)
     handshake(fd);
 
     while (1) {
-        receive_data(fd);
+        char data_buffer [DATA_BUFFER_SIZE] ;
+        receive_data(fd, data_buffer);
     }
 
     sleep(1);
@@ -813,13 +818,69 @@ int llread(unsigned char * buffer){
 int llopen(linkLayer connectionParameters) {
 
     if (connectionParameters.role == TRANSMITTER) {
-       -1
+       return -1;
     }
+
+    //Generate fd
+
+    char buf[255];
+
+    fd = open(connectionParameters.serialPort, O_RDWR | O_NOCTTY );
+    if (fd < 0) {return -1; }
+
+    if (tcgetattr(fd,&oldtio) == -1) { /* save current port settings */
+        perror("tcgetattr");
+        exit(-1);
+    }
+
+    bzero(&newtio, sizeof(newtio));
+    newtio.c_cflag = connectionParameters.baudRate | CS8 | CLOCAL | CREAD;
+    newtio.c_iflag = IGNPAR;
+    newtio.c_oflag = 0;
+
+    newtio.c_lflag = 0;
+
+    newtio.c_cc[VTIME]    = 0;   /* inter-character timer unused */
+    newtio.c_cc[VMIN]     = 1;   /* blocking read until 5 chars received */
+
+
+    tcflush(fd, TCIOFLUSH);
+
+    if (tcsetattr(fd,TCSANOW,&newtio) == -1) {
+        perror("tcsetattr");
+        exit(-1);
+    }
+
+    printf("New termios structure set\n");
+
+    // Our code
+
+
+    initializeStateMachine();
 
     int ret = handshake(fd);
 
     if (ret == 1) {
 
+        return 1;
+    }
+    else {
+        return -1;
+    }
+
+}
+
+int llclose(linkLayer connectionParameters, int showStatistics){
+
+    int res = disconnect(fd);
+
+    //TODO Missing statistics
+
+    tcsetattr(fd,TCSANOW,&oldtio);
+
+    close(fd);
+
+    if (res == 1) {
         return 1;
     }
     else {
