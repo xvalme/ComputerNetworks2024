@@ -354,6 +354,8 @@ int receive(int fd) {
             case C_RCV_State:
                 if (buf[0] == (address^control))  {
                     state = BCC_OK_State;
+                        fprintf(stderr, "[INFO] AAA\n");
+
                 } else {
                     state = Start_State;
                 }
@@ -515,6 +517,8 @@ int disconnect(int fd, int ctrl) {
     
     // recive disc
     int control_code = receive(fd);
+
+
     if (control_code == control_disc_field) {
         fprintf(stderr, "[INFO] Received DISC\n");
     } else {

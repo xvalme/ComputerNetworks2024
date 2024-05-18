@@ -792,10 +792,18 @@ int main(int argc, char** argv)
     initializeStateMachine();
     handshake(fd);
 
+    int counter = 0;
+
     while (1) {
         char data_buffer [DATA_BUFFER_SIZE] ;
         receive_data(fd, data_buffer);
+        counter++;
+        if (counter==6) {
+            break;
+        }
     }
+
+    disconnect(fd);
 
     sleep(1);
     tcsetattr(fd,TCSANOW,&oldtio);
