@@ -47,8 +47,10 @@ typedef enum {
 
 
 enum ControlField{
-    control_rr,
-    control_rej
+    control_rr_field,
+    control_rej_field,
+    control_ua_field,
+    control_disc_field
 };
 
 int handshake(int fd) {
@@ -250,11 +252,16 @@ int receive(int fd) {
     const char control_rej_0 = 0b00000101;
 	char control;
 	const char control_ua = 0x06;
+    const char control_disc = 0x0A;
 
     char current_ctrl = 0x80;
 
     bool rr = false;
     bool rej = false;
+    bool disc = false;
+    bool ua = false;
+
+    int control_field;
 
     int ctrl_get = ctrl;
 
@@ -304,24 +311,40 @@ int receive(int fd) {
                 if (DEBUG_ALL) fprintf(stderr, "Buffer: %04x\n", buf[0]);
                 if (buf[0] == control_rr_1) {
                     control = control_rr_1;
+                    control_field = control_rr_field;
                     ctrl_get = 1;
                     rr = true;
                     state = C_RCV_State;
                 } else if (buf[0] == control_rr_0) {
                     control = control_rr_0;
                     ctrl_get = 0;
+                    control_field = control_rr_field;
                     rr = true;
                     state = C_RCV_State;
                 } else if (buf[0] == control_rej_1) {
                     control = control_rej_1;
                     ctrl_get = 1;
                     rej = true;
+                    control_field = control_rej_field;
                     state = C_RCV_State;
                 } else if (buf[0] == control_rej_0) {
                     control = control_rej_0;
                     ctrl_get = 0;
                     rej = true;
+                    control_field = control_rej_field;
                     state = C_RCV_State;
+                } else if (buf[0] == control_ua) {
+                    control = control_ua;
+                    ua = true;
+                    control_field = control_ua_field;
+                    state = C_RCV_State;
+                } else if (buf[0] == control_disc) {
+                    control = control_disc;
+                    disc = true;
+                    control_field = control_disc_field;
+                    state = C_RCV_State;
+                } else if (buf[0] == flag) {
+                    state = Flag_RCV_State;
                 } else {
                     exit(-1);  
                     state = Start_State;
@@ -343,13 +366,30 @@ int receive(int fd) {
                     TOGGLE_CTRL(ctrl);
                     char buffer[5]= {flag, address_sender, current_ctrl, address_sender^current_ctrl, flag};
                     //int res = write(fd,buffer,5);
-                    if (rr == true) {
+                    switch (control_field)
+                    {
+                    case control_ua_field:
+                        /* code */
+                        return control_ua_field;
+                        break;
+                    case control_disc_field:
+                    
+                        /* code */
+                        return control_disc_field;
+                        break;
+                    case control_rr_field:
+                        /* code */
                         fprintf(stderr, "[INFO] Received RR\n");
-                        return 0;
-                    }
-                    if (rej == true) {
+                        return control_rr_field;
+                        break;
+                    case control_rej_field:
                         fprintf(stderr, "[INFO] Received REJ\n");
-                        return 1;
+                        /* code */
+                        return control_rej_field;
+                        break;
+                    
+                    default:
+                        break;
                     }
                 } else {
                     state = Start_State;
@@ -444,6 +484,51 @@ int send_data(int fd, const char* data, int data_length, int ctrl) {
 
     return 0;
 }
+int disconnect(int fd, int ctrl) {
+	char test_packet[5];
+    const char flag = 0x5c;
+    const char address = 0x01;
+    const char control_ua = 0x06;
+    
+    char control_disc = 0x0A;
+    
+    /* fill the packet */
+    test_packet[0] = flag;
+    test_packet[1] = address;
+    test_packet[2] = control_disc;
+    test_packet[3] = address^control_disc;
+    test_packet[4] = flag;
+
+    for (int i = 0; i < sizeof(test_packet); i++) {
+        if (DEBUG_ALL) fprintf(stderr, "%x ", test_packet[i]);
+    }
+
+    fprintf(stderr, "[INFO] Sending DISC\n");
+    int res = write(fd,test_packet, sizeof(test_packet));
+    
+    if (res == sizeof(test_packet)) {
+        fprintf(stderr, "[INFO] Sent DISC\n");
+    } else {
+        fprintf(stderr, "[ERR] Error sending DISC\n");
+        return -1;
+    }
+    
+    // recive disc
+    int control_code = receive(fd);
+    if (control_code == control_disc_field) {
+        fprintf(stderr, "[INFO] Received DISC\n");
+    } else {
+        fprintf(stderr, "[ERR] Error receiving DISC %d\n", control_code);
+        return -1;
+    }
+
+    // send ua
+    char buffer[5]= {flag, address, control_ua, address^control_ua, flag};
+    res = write(fd,buffer,5);
+
+
+    return 0;
+}
 
 int send_msg(int fd, const char* msg) {
     int retr;
@@ -486,9 +571,9 @@ int send_msg(int fd, const char* msg) {
 
             if (DEBUG_ALL) fprintf(stderr, "[DEBUG] Received RR: %d\n", retr);
 
-            if (retr == control_rej) {
+            if (retr == control_rej_field) {
                 state = Send0_State;
-            } else if (retr == control_rr) {
+            } else if (retr == control_rr_field) {
                 state = Stop_SM_State;
                 return 0;
             } else {
@@ -517,9 +602,9 @@ int send_msg(int fd, const char* msg) {
                 return -1;
             }
 
-            if (retr == control_rej) {
+            if (retr == control_rej_field) {
                 state = Send1_State;
-            } else if (retr == control_rr) {
+            } else if (retr == control_rr_field) {
                 state = Stop_SM_State;
                 return 0;
             } else {
@@ -607,13 +692,22 @@ int main(int argc, char** argv)
     char data4[] = "Bye!";
     char data5[] = "THis is a test message that is even longer.";
 
+    fprintf(stderr, "[INFOOO] Sending data\n");
     send_msg(fd, data);
+    fprintf(stderr, "[INFO] Sent message 1\n");
+    fprintf(stderr, "[INFO] Sent message 1\n");
     send_msg(fd, data1);
+    fprintf(stderr, "[INFO] Sent message 2\n");
     send_msg(fd, data2);
+    fprintf(stderr, "[INFO] Sent message 3\n");
     send_msg(fd, data3);
+    fprintf(stderr, "[INFO] Sent message 4\n");
     send_msg(fd, data4);
+    fprintf(stderr, "[INFO] Sent message 5\n");
     send_msg(fd, data5);
+    fprintf(stderr, "[INFO] Sent message 6\n");
 
+    disconnect(fd, ctrl);
 
     // if (send_data(fd, data, strlen(data), 1) != 0) {
     //     fprintf(stderr, "[ERR] Error in sending data\n");
