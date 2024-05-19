@@ -653,7 +653,7 @@ int disconnect(int fd){
 
                         printf("[DISC] Received correct DISC\n");
 
-                        char UA [5] = {0x5c, 0x01, 0x0A, "", 0x5c};
+                        char UA [5] = {0x5c, 0x03, 0x0A, "", 0x5c};
 
                         UA[3] = UA[1]^UA[2];
 
