@@ -16,6 +16,10 @@
 #define FALSE 0
 #define TRUE 1
 
+#define SUCCESS 1
+#define FAILURE -1
+
+
 volatile int STOP=FALSE;
 
 /* toggle the control bit value */
@@ -52,6 +56,29 @@ enum ControlField{
     control_ua_field,
     control_disc_field
 };
+
+
+
+typedef struct linkLayer{
+ char serialPort[50];
+ int role; //defines the role of the program: 0==Transmitter,1=Receiver
+ int baudRate;
+ int numTries;
+ int timeOut;
+} linkLayer;
+//ROLE
+#define NOT_DEFINED -1
+#define TRANSMITTER 0
+#define RECEIVER 1
+//SIZE of maximum acceptable payload; maximum number of bytes that application layer should send to link layer
+#define MAX_PAYLOAD_SIZE 1000
+//CONNECTION deafault values
+#define BAUDRATE_DEFAULT B38400
+#define MAX_RETRANSMISSIONS_DEFAULT 3
+#define TIMEOUT_DEFAULT 4
+#define _POSIX_SOURCE 1 /* POSIX compliant source */
+
+int fd;
 
 int handshake(int fd) {
     fprintf(stderr, "[INFO] Initializing Handshake \n");
@@ -271,6 +298,8 @@ int receive(int fd) {
     char received_data[DATA_BUFFER_SIZE];
     int data_index = 0;
 
+    fprintf(stderr, "[INFO] Initializing receiving \n");
+
     while (STOP==FALSE || state != Stop_State) {       /* loop for input */
         // fprintf(stderr, "[INFO] Initializing RR \n");
         int res = read(fd,buf,1);   /* returns after 5 chars have been input */
@@ -308,7 +337,7 @@ int receive(int fd) {
                 break;
 
             case A_RCV_State:
-                if (DEBUG_ALL) fprintf(stderr, "Buffer: %04x\n", buf[0]);
+                // if (DEBUG_ALL) fprintf(stderr, "Buffer: %04x\n", buf[0]);
                 if (buf[0] == control_rr_1) {
                     control = control_rr_1;
                     control_field = control_rr_field;
@@ -484,7 +513,7 @@ int send_data(int fd, const char* data, int data_length, int ctrl) {
         return -1;
     }
 
-    return 0;
+    return res;
 }
 int disconnect(int fd, int ctrl) {
 	char test_packet[5];
@@ -512,7 +541,7 @@ int disconnect(int fd, int ctrl) {
         fprintf(stderr, "[INFO] Sent DISC\n");
     } else {
         fprintf(stderr, "[ERR] Error sending DISC\n");
-        return -1;
+        return FAILURE;
     }
     
     // recive disc
@@ -523,7 +552,7 @@ int disconnect(int fd, int ctrl) {
         fprintf(stderr, "[INFO] Received DISC\n");
     } else {
         fprintf(stderr, "[ERR] Error receiving DISC %d\n", control_code);
-        return -1;
+        return FAILURE;
     }
 
     // send ua
@@ -531,7 +560,7 @@ int disconnect(int fd, int ctrl) {
     res = write(fd,buffer,5);
 
 
-    return 0;
+    return SUCCESS;
 }
 
 int send_msg(int fd, const char* msg) {
@@ -544,6 +573,8 @@ int send_msg(int fd, const char* msg) {
     fd_set readfds;
     int ready;
 
+    int res = -1;
+
 
     senderSM state = Send0_State;
     while (state != Stop_SM_State) {
@@ -553,7 +584,7 @@ int send_msg(int fd, const char* msg) {
         {
         case Send0_State:
             fprintf(stderr, "[INFO] Sending data with ctrl %d\n", ctrl);
-            send_data(fd, msg, strlen(msg), ctrl);
+            res = send_data(fd, msg, strlen(msg), ctrl);
             state = ACK0_State;
             break;
         case ACK0_State:
@@ -579,7 +610,7 @@ int send_msg(int fd, const char* msg) {
                 state = Send0_State;
             } else if (retr == control_rr_field) {
                 state = Stop_SM_State;
-                return 0;
+                return res;
             } else {
                 // some error
                 state = Send0_State;
@@ -588,7 +619,7 @@ int send_msg(int fd, const char* msg) {
 
         case Send1_State:
             fprintf(stderr, "[INFO] Sending data with ctrl %d\n", ctrl);
-            send_data(fd, msg, strlen(msg), ctrl);
+            res = send_data(fd, msg, strlen(msg), ctrl);
             state = ACK1_State;
             break;
         case ACK1_State:
@@ -610,21 +641,21 @@ int send_msg(int fd, const char* msg) {
                 state = Send1_State;
             } else if (retr == control_rr_field) {
                 state = Stop_SM_State;
-                return 0;
+                return res;
             } else {
                 // some error
                 state = Send1_State;
             }
         case Stop_SM_State:
             if (DEBUG_ALL) fprintf(stderr, "[INFO] Stopping sender state machine\n");
-            return 0;
+            return res;
             break;
         
         default:
             break;
         }
     }
-    return 0;
+    return res;
 }
 
 int main(int argc, char** argv)
@@ -754,4 +785,92 @@ int main(int argc, char** argv)
 
     close(fd);
     return 0;
+}
+
+/**
+ * @brief protocol API to establish connection
+ * 
+ * @param connectionParameters structure containing 
+ *        configuration parameters
+ * @return int 1: success; -1: failure/ error
+ */
+int llopen(linkLayer connectionParameters) {
+    int fd;
+    struct termios oldtio,newtio;
+
+    fd = open(connectionParameters.serialPort, O_RDWR | O_NOCTTY );
+    if (fd < 0) { perror(connectionParameters.serialPort); exit(-1); }
+
+    if ( tcgetattr(fd,&oldtio) == -1) { /* save current port settings */
+        perror("tcgetattr");
+        exit(-1);
+    }
+
+    bzero(&newtio, sizeof(newtio));
+    newtio.c_cflag = connectionParameters.baudRate | CS8 | CLOCAL | CREAD;
+    newtio.c_iflag = IGNPAR;
+    newtio.c_oflag = 0;
+
+    /* set input mode (non-canonical, no echo,...) */
+    newtio.c_lflag = 0;
+
+    newtio.c_cc[VTIME] = connectionParameters.timeOut;   /* inter-character timer unused */
+    newtio.c_cc[VMIN] = 5;   /* blocking read until 5 chars received */
+
+    tcflush(fd, TCIOFLUSH);
+
+    if (tcsetattr(fd,TCSANOW,&newtio) == -1) {
+        perror("tcsetattr");
+        exit(-1);
+    }
+
+    if (connectionParameters.role == TRANSMITTER) {
+        if (handshake(fd) != 0) {
+            fprintf(stderr, "[ERR] Error in handshake\n");
+            exit(-1);
+        }
+    } else {
+        if (receive_data(fd) != 0) {
+            fprintf(stderr, "[ERR] Error in receiving data\n");
+            exit(-1);
+        }
+    }
+
+    return fd;
+}
+
+/**
+ * @brief protocol API to write data
+ * 
+ * @param buffer array of characters to transmit
+ * @param length length of the character array
+ * @return int Number of written characters; Negative value in case of failure/ error
+ */
+int llwrite(unsigned char * buffer, int length) {
+    int number_of_bytes_written = send_msg(fd, buffer);
+    if (number_of_bytes_written(fd, buffer) <= 0) {
+        fprintf(stderr, "[ERR] Error in sending data\n");
+        return FAILURE;
+    }
+    return number_of_bytes_written;
+}
+
+/**
+ * @brief 
+ * 
+ * @param connectionParameters  data link parameters stored in linkLayer structure
+ * @param showStatistics true or false to show statistics collected by link layer for performance evaluation
+ * @return int Positive value in case of failure/ error; Negative value in case of failure/ error
+ */
+int llclose(linkLayer connectionParameters, int showStatistics) {
+    if (disconnect(fd, ctrl) != SUCCESS) {
+        fprintf(stderr, "[ERR] Error in disconnecting\n");
+        return FAILURE;
+    }
+
+    if (showStatistics) {
+        // show statistics
+    }
+    
+    return SUCCESS;
 }
