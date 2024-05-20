@@ -20,7 +20,7 @@
 #define FAILURE -1
 
 
-volatile int STOP=FALSE;
+volatile int s_STOP=FALSE;
 
 /* toggle the control bit value */
 #define TOGGLE_CTRL(var) ((var) == 0 ? (var) = 1 : ((var) = 0))
@@ -28,7 +28,7 @@ volatile int STOP=FALSE;
 #define DATA_BUFFER_SIZE 1024
 #define DEBUG_ALL 1
 
-int ctrl = 0;
+int s_ctrl = 0;
 
 typedef enum {
     Start_State,
@@ -39,7 +39,7 @@ typedef enum {
     Stop_State,
     DATA_RCV_State,
     BCC2_OK_State
-} StateMachine;
+} s_StateMachine;
 
 typedef enum {
     Send0_State,
@@ -61,15 +61,16 @@ enum ControlField{
 
 typedef struct linkLayer{
  char serialPort[50];
- int role; //defines the role of the program: 0==Transmitter,1=Receiver
+ int role; //defines the role of the program: 0==Transmitter,1=s_receiver
  int baudRate;
  int numTries;
  int timeOut;
 } linkLayer;
+
 //ROLE
 #define NOT_DEFINED -1
 #define TRANSMITTER 0
-#define RECEIVER 1
+#define s_receiveR 1
 //SIZE of maximum acceptable payload; maximum number of bytes that application layer should send to link layer
 #define MAX_PAYLOAD_SIZE 1000
 //CONNECTION deafault values
@@ -78,10 +79,10 @@ typedef struct linkLayer{
 #define TIMEOUT_DEFAULT 4
 #define _POSIX_SOURCE 1 /* POSIX compliant source */
 
-int fd;
+int s_fd;
 
-int handshake(int fd) {
-    fprintf(stderr, "[INFO] Initializing Handshake \n");
+int s_handshake(int s_fd) {
+    fprintf(stderr, "[INFO] Initializing s_handshake \n");
 
 	const char flag = 0x5c;
 	const char address = 0x01;
@@ -93,7 +94,7 @@ int handshake(int fd) {
 	
     char buffer[5]= {flag, address, control, bcc1, flag};
 
-    int res = write(fd,buffer,5);
+    int res = write(s_fd,buffer,5);
 
     if (res == 5) {
         fprintf(stderr, "[INFO] Sent SET packet\n");
@@ -104,12 +105,12 @@ int handshake(int fd) {
 
     char buf[6];
 	
-    StateMachine state = Start_State;
-    while (STOP==FALSE || state != Stop_State) {       /* loop for input */
-        res = read(fd,buf,1);   /* returns after 5 chars have been input */
+    s_StateMachine state = Start_State;
+    while (s_STOP==FALSE || state != Stop_State) {       /* loop for input */
+        res = read(s_fd,buf,1);   /* returns after 5 chars have been input */
         buf[res]=0;               /* so we can printf... */
-        // fprintf(stderr, "[INFO] Received byte: %x, %d\n", buf[0], state);
-        char received_correct = 1;
+        // fprintf(stderr, "[INFO] s_received byte: %x, %d\n", buf[0], state);
+        char s_received_correct = 1;
     
         switch (state) {
         case Start_State:
@@ -164,7 +165,7 @@ int handshake(int fd) {
     return 0;
 }
 
-int receive_data(int fd) {
+int s_s_receive_data(int s_fd) {
     const char flag = 0x5c;
 	const char address = 0x01;
 	const char control = 0x08;
@@ -174,19 +175,19 @@ int receive_data(int fd) {
 	const char bcc1_ua = address^control_ua;
 
     char buf[1];
-    StateMachine state = Start_State;
+    s_StateMachine state = Start_State;
     int consecutive_flags = 0;
-    char received_data[DATA_BUFFER_SIZE];
+    char s_received_data[DATA_BUFFER_SIZE];
     int data_index = 0;
 
 	
-    while (STOP==FALSE || state != Stop_State) {       /* loop for input */
-        int res = read(fd,buf,1);   /* returns after 5 chars have been input */
+    while (s_STOP==FALSE || state != Stop_State) {       /* loop for input */
+        int res = read(s_fd,buf,1);   /* returns after 5 chars have been input */
         if (res < 0) {
             fprintf(stderr, "[ERR] Error reading from serial port\n");
             return -1;
         }
-        // char received_correct = 1;
+        // char s_received_correct = 1;
         if (buf[0] == flag) {
             consecutive_flags++;
         } else {
@@ -195,7 +196,7 @@ int receive_data(int fd) {
 
         if (consecutive_flags == 2) {
             // two consecutive flags, end of data
-            fprintf(stderr, "[INFO] Received end of data\n");
+            fprintf(stderr, "[INFO] s_received end of data\n");
             break;
         }
     
@@ -239,12 +240,12 @@ int receive_data(int fd) {
                 break;
 
             case DATA_RCV_State:
-                // Save received data
+                // Save s_received data
                 if (buf[0] != flag) {
                     if (data_index < DATA_BUFFER_SIZE) {
-                        received_data[data_index++] = buf[0];
+                        s_received_data[data_index++] = buf[0];
                     } else {
-                        fprintf(stderr, "[ERR] Received data too large\n");
+                        fprintf(stderr, "[ERR] s_received data too large\n");
                         return -1;
                     }
                 } else {
@@ -255,8 +256,8 @@ int receive_data(int fd) {
             case BCC2_OK_State:
                 if (buf[0] == flag) {
                     state = Stop_State;
-                    // Print received data
-                    printf("[INFO] Received data: %s\n", received_data);
+                    // Print s_received data
+                    printf("[INFO] s_received data: %s\n", s_received_data);
                     return 0;
                 } else {
                     state = Start_State;
@@ -269,7 +270,7 @@ int receive_data(int fd) {
     }
     return 0;
 }
-int receive(int fd) {
+int s_receive(int s_fd) {
     const char flag = 0x5c;
 	const char address = 0x03;
 	const char address_sender = 0x01;
@@ -290,25 +291,25 @@ int receive(int fd) {
 
     int control_field;
 
-    int ctrl_get = ctrl;
+    int ctrl_get = s_ctrl;
 
     char buf[1];
-    StateMachine state = Start_State;
+    s_StateMachine state = Start_State;
     int consecutive_flags = 0;
-    char received_data[DATA_BUFFER_SIZE];
+    char s_received_data[DATA_BUFFER_SIZE];
     int data_index = 0;
 
     fprintf(stderr, "[INFO] Initializing receiving \n");
 
-    while (STOP==FALSE || state != Stop_State) {       /* loop for input */
+    while (s_STOP==FALSE || state != Stop_State) {       /* loop for input */
         // fprintf(stderr, "[INFO] Initializing RR \n");
-        int res = read(fd,buf,1);   /* returns after 5 chars have been input */
-        // fprintf(stderr, "[INFO] Received byte: %x, %d\n", buf[0], state);
+        int res = read(s_fd,buf,1);   /* returns after 5 chars have been input */
+        // fprintf(stderr, "[INFO] s_received byte: %x, %d\n", buf[0], state);
         if (res < 0) {
             fprintf(stderr, "[ERR] Error reading from serial port\n");
             return -1;
         }
-        // char received_correct = 1;
+        // char s_received_correct = 1;
         if (buf[0] == flag) {
             consecutive_flags++;
         } else {
@@ -317,7 +318,7 @@ int receive(int fd) {
 
         if (consecutive_flags == 2) {
             // two consecutive flags, end of data
-            fprintf(stderr, "[INFO] Received end of data\n");
+            fprintf(stderr, "[INFO] s_received end of data\n");
             break;
         }
     
@@ -392,11 +393,11 @@ int receive(int fd) {
 
             case BCC_OK_State:
                 if (buf[0] == flag) {
-                    if (ctrl_get != ctrl) return -1;
+                    if (ctrl_get != s_ctrl) return -1;
 
-                    TOGGLE_CTRL(ctrl);
+                    TOGGLE_CTRL(s_ctrl);
                     char buffer[5]= {flag, address_sender, current_ctrl, address_sender^current_ctrl, flag};
-                    //int res = write(fd,buffer,5);
+                    //int res = write(s_fd,buffer,5);
                     switch (control_field)
                     {
                     case control_ua_field:
@@ -410,11 +411,11 @@ int receive(int fd) {
                         break;
                     case control_rr_field:
                         /* code */
-                        fprintf(stderr, "[INFO] Received RR\n");
+                        fprintf(stderr, "[INFO] s_received RR\n");
                         return control_rr_field;
                         break;
                     case control_rej_field:
-                        fprintf(stderr, "[INFO] Received REJ\n");
+                        fprintf(stderr, "[INFO] s_received REJ\n");
                         /* code */
                         return control_rej_field;
                         break;
@@ -432,7 +433,7 @@ int receive(int fd) {
     }
     return -1;
 }
-char* byte_stuffing(const char* data, int data_length) {
+char* s_byte_stuffing(const char* data, int data_length) {
     const char ESC = 0x1B;
     const char flag = 0x5c;
     char* new_data = (char*)malloc(sizeof(char) * (data_length * 2 + 1)); // Allocate memory for new_data
@@ -461,13 +462,13 @@ char* byte_stuffing(const char* data, int data_length) {
     return new_data;
 }
 
-int send_data(int fd, const char* data, int data_length, int ctrl) {
+int s_send_data(int s_fd, const char* data, int data_length, int s_ctrl) {
 	char test_packet[data_length+6];
     const char flag = 0x5c;
     const char address = 0x01;
     
     char control;
-	if (ctrl){
+	if (s_ctrl){
 		control = 0xc0;
 		}
     else {
@@ -480,7 +481,7 @@ int send_data(int fd, const char* data, int data_length, int ctrl) {
     test_packet[2] = control;
     test_packet[3] = address^control;
 
-    char *new_data = byte_stuffing(data, data_length);
+    char *new_data = s_byte_stuffing(data, data_length);
 
     int j = 0;
     while (new_data[j] != '\0') {
@@ -504,7 +505,7 @@ int send_data(int fd, const char* data, int data_length, int ctrl) {
         if (DEBUG_ALL) fprintf(stderr, "%x ", test_packet[i]);
     }
 
-    int res = write(fd,test_packet, sizeof(test_packet));
+    int res = write(s_fd,test_packet, sizeof(test_packet));
     
     if (res == sizeof(test_packet)) {
         fprintf(stderr, "[INFO] Sent dummy data packet\n");
@@ -515,7 +516,7 @@ int send_data(int fd, const char* data, int data_length, int ctrl) {
 
     return res;
 }
-int disconnect(int fd, int ctrl) {
+int s_disconnect(int s_fd, int s_ctrl) {
 	char test_packet[5];
     const char flag = 0x5c;
     const char address = 0x01;
@@ -535,7 +536,7 @@ int disconnect(int fd, int ctrl) {
     }
 
     fprintf(stderr, "[INFO] Sending DISC\n");
-    int res = write(fd,test_packet, sizeof(test_packet));
+    int res = write(s_fd,test_packet, sizeof(test_packet));
     
     if (res == sizeof(test_packet)) {
         fprintf(stderr, "[INFO] Sent DISC\n");
@@ -545,11 +546,11 @@ int disconnect(int fd, int ctrl) {
     }
     
     // recive disc
-    int control_code = receive(fd);
+    int control_code = s_receive(s_fd);
 
 
     if (control_code == control_disc_field) {
-        fprintf(stderr, "[INFO] Received DISC\n");
+        fprintf(stderr, "[INFO] s_received DISC\n");
     } else {
         fprintf(stderr, "[ERR] Error receiving DISC %d\n", control_code);
         return FAILURE;
@@ -557,13 +558,13 @@ int disconnect(int fd, int ctrl) {
 
     // send ua
     char buffer[5]= {flag, address, control_ua, address^control_ua, flag};
-    res = write(fd,buffer,5);
+    res = write(s_fd,buffer,5);
 
 
     return SUCCESS;
 }
 
-int send_msg(int fd, const char* msg) {
+int s_send_msg(int s_fd, const char* msg) {
     int retr;
 
     // timeout
@@ -583,14 +584,14 @@ int send_msg(int fd, const char* msg) {
         switch (state)
         {
         case Send0_State:
-            fprintf(stderr, "[INFO] Sending data with ctrl %d\n", ctrl);
-            res = send_data(fd, msg, strlen(msg), ctrl);
+            fprintf(stderr, "[INFO] Sending data with s_ctrl %d\n", s_ctrl);
+            res = s_send_data(s_fd, msg, strlen(msg), s_ctrl);
             state = ACK0_State;
             break;
         case ACK0_State:
             FD_ZERO(&readfds);
-            FD_SET(fd, &readfds);
-            ready = select(fd+1, &readfds, NULL, NULL, &timeout);
+            FD_SET(s_fd, &readfds);
+            ready = select(s_fd+1, &readfds, NULL, NULL, &timeout);
             if (ready == 0) {
                 fprintf(stderr, "[ERR] Timeout waiting for RR\n");
                 sleep(1);
@@ -601,10 +602,10 @@ int send_msg(int fd, const char* msg) {
                 fprintf(stderr, "[ERR] Error waiting for RR\n");
                 return -1;
             }
-            retr = receive(fd);
+            retr = s_receive(s_fd);
 
 
-            if (DEBUG_ALL) fprintf(stderr, "[DEBUG] Received RR: %d\n", retr);
+            if (DEBUG_ALL) fprintf(stderr, "[DEBUG] s_received RR: %d\n", retr);
 
             if (retr == control_rej_field) {
                 state = Send0_State;
@@ -618,14 +619,14 @@ int send_msg(int fd, const char* msg) {
             break;
 
         case Send1_State:
-            fprintf(stderr, "[INFO] Sending data with ctrl %d\n", ctrl);
-            res = send_data(fd, msg, strlen(msg), ctrl);
+            fprintf(stderr, "[INFO] Sending data with s_ctrl %d\n", s_ctrl);
+            res = s_send_data(s_fd, msg, strlen(msg), s_ctrl);
             state = ACK1_State;
             break;
         case ACK1_State:
             FD_ZERO(&readfds);
-            FD_SET(fd, &readfds);
-            ready = select(fd+1, &readfds, NULL, NULL, &timeout);
+            FD_SET(s_fd, &readfds);
+            ready = select(s_fd+1, &readfds, NULL, NULL, &timeout);
             if (ready == 0) {
                 fprintf(stderr, "[ERR] Timeout waiting for response\n");
                 sleep(1);
@@ -660,7 +661,7 @@ int send_msg(int fd, const char* msg) {
 
 int main(int argc, char** argv)
 {
-    int fd,c, res;
+    int s_fd,c, res;
     struct termios oldtio,newtio;
     char buf[255];
     int i, sum = 0, speed = 0;
@@ -678,10 +679,10 @@ int main(int argc, char** argv)
     */
 
 
-    fd = open(argv[1], O_RDWR | O_NOCTTY );
-    if (fd < 0) { perror(argv[1]); exit(-1); }
+    s_fd = open(argv[1], O_RDWR | O_NOCTTY );
+    if (s_fd < 0) { perror(argv[1]); exit(-1); }
 
-    if ( tcgetattr(fd,&oldtio) == -1) { /* save current port settings */
+    if ( tcgetattr(s_fd,&oldtio) == -1) { /* save current port settings */
         perror("tcgetattr");
         exit(-1);
     }
@@ -695,7 +696,7 @@ int main(int argc, char** argv)
     newtio.c_lflag = 0;
 
     newtio.c_cc[VTIME]    = 0;   /* inter-character timer unused */
-    newtio.c_cc[VMIN]     = 5;   /* blocking read until 5 chars received */
+    newtio.c_cc[VMIN]     = 5;   /* blocking read until 5 chars s_received */
 
 
 
@@ -705,9 +706,9 @@ int main(int argc, char** argv)
     */
 
 
-    tcflush(fd, TCIOFLUSH);
+    tcflush(s_fd, TCIOFLUSH);
 
-    if (tcsetattr(fd,TCSANOW,&newtio) == -1) {
+    if (tcsetattr(s_fd,TCSANOW,&newtio) == -1) {
         perror("tcsetattr");
         exit(-1);
     }
@@ -715,8 +716,8 @@ int main(int argc, char** argv)
     printf("New termios structure set\n");
 
 
-    if (handshake(fd) != 0) {
-        fprintf(stderr, "[ERR] Error in handshake\n");
+    if (s_handshake(s_fd) != 0) {
+        fprintf(stderr, "[ERR] Error in s_handshake\n");
         exit(-1);
     }
 
@@ -728,31 +729,31 @@ int main(int argc, char** argv)
     char data5[] = "THis is a test message that is even longer.";
 
     fprintf(stderr, "[INFOOO] Sending data\n");
-    send_msg(fd, data);
+    s_send_msg(s_fd, data);
     fprintf(stderr, "[INFO] Sent message 1\n");
     fprintf(stderr, "[INFO] Sent message 1\n");
-    send_msg(fd, data1);
+    s_send_msg(s_fd, data1);
     fprintf(stderr, "[INFO] Sent message 2\n");
-    send_msg(fd, data2);
+    s_send_msg(s_fd, data2);
     fprintf(stderr, "[INFO] Sent message 3\n");
-    send_msg(fd, data3);
+    s_send_msg(s_fd, data3);
     fprintf(stderr, "[INFO] Sent message 4\n");
-    send_msg(fd, data4);
+    s_send_msg(s_fd, data4);
     fprintf(stderr, "[INFO] Sent message 5\n");
-    send_msg(fd, data5);
+    s_send_msg(s_fd, data5);
     fprintf(stderr, "[INFO] Sent message 6\n");
 
-    disconnect(fd, ctrl);
+    s_disconnect(s_fd, s_ctrl);
 
-    // if (send_data(fd, data, strlen(data), 1) != 0) {
+    // if (s_send_data(s_fd, data, strlen(data), 1) != 0) {
     //     fprintf(stderr, "[ERR] Error in sending data\n");
     //     exit(-1);
     // }
 
-    // while (receive(fd) != 0) 
+    // while (s_receive(s_fd) != 0) 
     // {
     //     fprintf(stderr, "[ERR] Error in receiving RR\n");
-    //     if (send_data(fd, data, strlen(data), 1) != 0) {
+    //     if (s_send_data(s_fd, data, strlen(data), 1) != 0) {
     //         fprintf(stderr, "[ERR] Error in sending data\n");
     //         exit(-1);
     //     }
@@ -761,15 +762,15 @@ int main(int argc, char** argv)
 
 
     // char data2[] = "This is a second message.";
-    // if (send_data(fd, data2, strlen(data2), 0) != 0) {
+    // if (s_send_data(s_fd, data2, strlen(data2), 0) != 0) {
     //     fprintf(stderr, "[ERR] Error in sending data\n");
     //     exit(-1);
     // }
 
-    // while (receive(fd) != 0) 
+    // while (s_receive(s_fd) != 0) 
     // {
     //     fprintf(stderr, "[ERR] Error in receiving RR\n");
-    //     if (send_data(fd, data2, strlen(data2), 0) != 0) {
+    //     if (s_send_data(s_fd, data2, strlen(data2), 0) != 0) {
     //         fprintf(stderr, "[ERR] Error in sending data\n");
     //         exit(-1);
     //     }
@@ -777,13 +778,13 @@ int main(int argc, char** argv)
     fprintf(stderr, "[INFO] Data sent successfully\n");
 
     sleep(1);
-    if ( tcsetattr(fd,TCSANOW,&oldtio) == -1) {
+    if ( tcsetattr(s_fd,TCSANOW,&oldtio) == -1) {
         perror("tcsetattr");
         exit(-1);
     }
 
 
-    close(fd);
+    close(s_fd);
     return 0;
 }
 
@@ -794,14 +795,14 @@ int main(int argc, char** argv)
  *        configuration parameters
  * @return int 1: success; -1: failure/ error
  */
-int llopen(linkLayer connectionParameters) {
-    int fd;
+int s_llopen(linkLayer connectionParameters) {
+    int s_fd;
     struct termios oldtio,newtio;
 
-    fd = open(connectionParameters.serialPort, O_RDWR | O_NOCTTY );
-    if (fd < 0) { perror(connectionParameters.serialPort); exit(-1); }
+    s_fd = open(connectionParameters.serialPort, O_RDWR | O_NOCTTY );
+    if (s_fd < 0) { perror(connectionParameters.serialPort); exit(-1); }
 
-    if ( tcgetattr(fd,&oldtio) == -1) { /* save current port settings */
+    if ( tcgetattr(s_fd,&oldtio) == -1) { /* save current port settings */
         perror("tcgetattr");
         exit(-1);
     }
@@ -815,28 +816,28 @@ int llopen(linkLayer connectionParameters) {
     newtio.c_lflag = 0;
 
     newtio.c_cc[VTIME] = connectionParameters.timeOut;   /* inter-character timer unused */
-    newtio.c_cc[VMIN] = 5;   /* blocking read until 5 chars received */
+    newtio.c_cc[VMIN] = 5;   /* blocking read until 5 chars s_received */
 
-    tcflush(fd, TCIOFLUSH);
+    tcflush(s_fd, TCIOFLUSH);
 
-    if (tcsetattr(fd,TCSANOW,&newtio) == -1) {
+    if (tcsetattr(s_fd,TCSANOW,&newtio) == -1) {
         perror("tcsetattr");
         exit(-1);
     }
 
     if (connectionParameters.role == TRANSMITTER) {
-        if (handshake(fd) != 0) {
-            fprintf(stderr, "[ERR] Error in handshake\n");
+        if (s_handshake(s_fd) != 0) {
+            fprintf(stderr, "[ERR] Error in s_handshake\n");
             exit(-1);
         }
     } else {
-        if (receive_data(fd) != 0) {
+        if (s_s_receive_data(s_fd) != 0) {
             fprintf(stderr, "[ERR] Error in receiving data\n");
             exit(-1);
         }
     }
 
-    return fd;
+    return s_fd;
 }
 
 /**
@@ -846,8 +847,8 @@ int llopen(linkLayer connectionParameters) {
  * @param length length of the character array
  * @return int Number of written characters; Negative value in case of failure/ error
  */
-int llwrite(unsigned char * buffer, int length) {
-    int number_of_bytes_written = send_msg(fd, buffer);
+int s_llwrite(unsigned char * buffer, int length) {
+    int number_of_bytes_written = s_send_msg(s_fd, buffer);
     if (number_of_bytes_written <= 0) {
         fprintf(stderr, "[ERR] Error in sending data\n");
         return FAILURE;
@@ -862,9 +863,9 @@ int llwrite(unsigned char * buffer, int length) {
  * @param showStatistics true or false to show statistics collected by link layer for performance evaluation
  * @return int Positive value in case of failure/ error; Negative value in case of failure/ error
  */
-int llclose(linkLayer connectionParameters, int showStatistics) {
-    if (disconnect(fd, ctrl) != SUCCESS) {
-        fprintf(stderr, "[ERR] Error in disconnecting\n");
+int s_llclose(linkLayer connectionParameters, int showStatistics) {
+    if (s_disconnect(s_fd, s_ctrl) != SUCCESS) {
+        fprintf(stderr, "[ERR] Error in s_disconnecting\n");
         return FAILURE;
     }
 

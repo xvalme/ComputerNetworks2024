@@ -1,3 +1,5 @@
+//Here lies the code for the whole application
+
 /*Non-Canonical Input Processing*/
 
 #include <sys/types.h>
@@ -8,22 +10,12 @@
 
 #define FALSE 0
 #define TRUE 1
+#define SUCCESS 1
+#define FAILURE -1
 
 #define DEBUG_ALL 0
 
 volatile int STOP=FALSE;
-
-typedef struct linkLayer{
-
-    char serialPort[50]; //
-    int role;  //
-    int baudRate; // 
-    int numTries; 
-    int timeOut;
-    
-} linkLayer;
-
-#define BAUDRATE B38400
 
 //ROLE
 #define NOT_DEFINED -1
@@ -39,19 +31,26 @@ typedef struct linkLayer{
 #define TIMEOUT_DEFAULT 4
 #define _POSIX_SOURCE 1 /* POSIX compliant source */
 
-//TODO 
-//Add timeout to the read function
-
 typedef struct {
     int current_ctrl;
 } StateMachine;
+
+typedef struct linkLayer{
+
+    char serialPort[50]; //
+    int role;  //
+    int baudRate; // 
+    int numTries; 
+    int timeOut;
+    
+} linkLayer;
 
 int fd;
 
 struct termios oldtio,newtio;
 StateMachine state_machine;
 
-int ByteStuffing(char* str, int strlen) {
+int r_ByteStuffing(char* str, int strlen) {
 
     char buffer [DATA_BUFFER_SIZE];
     int counter = 0;
@@ -83,11 +82,11 @@ int ByteStuffing(char* str, int strlen) {
 
 }
 
-void initializeStateMachine() {
+void r_initializeStateMachine() {
     state_machine.current_ctrl = 0;
 }
 
-int handshake(int fd) {
+int r_handshake(int fd) {
     char buf[6];
     int temporary_size = 6;
     char temporary[temporary_size];
@@ -99,7 +98,7 @@ int handshake(int fd) {
 
     char STATE = 'S';
 
-    fprintf(stderr, "[Handshake] Waiting for reception of SET packet.\n");
+    fprintf(stderr, "[r_handshake] Waiting for reception of SET packet.\n");
 
     while(TRUE){
 
@@ -216,7 +215,7 @@ int handshake(int fd) {
     }
 }
 
-int receive_data_packet_(int fd, int current_ctrl_int, char *data_buffer) {
+int r_receive_data_packet_(int fd, int current_ctrl_int, char *data_buffer) {
 
     int res;
     char buf[DATA_BUFFER_SIZE];
@@ -401,7 +400,7 @@ int receive_data_packet_(int fd, int current_ctrl_int, char *data_buffer) {
     }
 }
 
-int send_rr(int fd, int ctrl){
+int r_send_rr(int fd, int ctrl){
     char rr [5] = {0x5c, 0x03, 0, 0, 0x5c};
 
     if (ctrl){
@@ -425,7 +424,7 @@ int send_rr(int fd, int ctrl){
 
 }
 
-int send_rej(int fd, int ctrl) {
+int r_send_rej(int fd, int ctrl) {
 
     char rr [5] = {0x5c, 0x03, 0, 0, 0x5c};
 
@@ -449,7 +448,7 @@ int send_rej(int fd, int ctrl) {
     }
 }
 
-int verify_if_ua_received(int fd){
+int r_verify_if_ua_received(int fd){
     char buf[6];
     int temporary_size = 6;
     char temporary[temporary_size];
@@ -459,7 +458,7 @@ int verify_if_ua_received(int fd){
 
     char STATE = 'S';
 
-    fprintf(stderr, "[Disconnect] Waiting for reception of UA packet.\n");
+    fprintf(stderr, "[r_disconnect] Waiting for reception of UA packet.\n");
 
     while(TRUE){
 
@@ -538,7 +537,7 @@ int verify_if_ua_received(int fd){
                         STATE = 'Z';
                         temporary[4] = buf[0];
 
-                        printf("[DISC] Received correct UA. Disconnecting.\n");
+                        printf("[DISC] Received correct UA. r_disconnecting.\n");
 
                         return 1;
                     }
@@ -560,7 +559,7 @@ int verify_if_ua_received(int fd){
     }
 }
 
-int disconnect(int fd){
+int r_disconnect(int fd){
     char buf[6];
     int temporary_size = 6;
     char temporary[temporary_size];
@@ -572,7 +571,7 @@ int disconnect(int fd){
 
     char STATE = 'S';
 
-    fprintf(stderr, "[Disconnect] Waiting for reception of DISC packet.\n");
+    fprintf(stderr, "[r_disconnect] Waiting for reception of DISC packet.\n");
 
     while(TRUE){
 
@@ -669,7 +668,7 @@ int disconnect(int fd){
                         }
                         printf("[DISC] Sent DISC back. Waiting for UA paccket.\n");
 
-                        if (verify_if_ua_received(fd)) {
+                        if (r_verify_if_ua_received(fd)) {
                             return 1;
                         }
                         else {
@@ -694,7 +693,7 @@ int disconnect(int fd){
     }
 }
 
-int receive_data(int fd, char *data_buffer){
+int r_receive_data(int fd, char *data_buffer){
 
     int res;
 
@@ -704,14 +703,14 @@ int receive_data(int fd, char *data_buffer){
 
 
     while(TRUE){
-        res = receive_data_packet_(fd, state_machine.current_ctrl, data_buffer);
+        res = r_receive_data_packet_(fd, state_machine.current_ctrl, data_buffer);
         if (res) {
             //Answer back with RR packet
 
-            send_rr(fd, state_machine.current_ctrl);
+            r_send_rr(fd, state_machine.current_ctrl);
 
             //Bytestuffing 
-            ByteStuffing(data_buffer, DATA_BUFFER_SIZE);
+            r_ByteStuffing(data_buffer, DATA_BUFFER_SIZE);
 
             fprintf(stderr, "%s\n", data_buffer);
 
@@ -724,12 +723,12 @@ int receive_data(int fd, char *data_buffer){
         }
 
         if (res == -2) {
-                disconnect(fd);
+                r_disconnect(fd);
             }
         else {
             // Asnwer back with REJ packet 
 
-            send_rej(fd, state_machine.current_ctrl);
+            r_send_rej(fd, state_machine.current_ctrl);
 
             return 1;
         }
@@ -739,87 +738,34 @@ int receive_data(int fd, char *data_buffer){
 
 int main(int argc, char** argv)
 {
-    int c, res;
-    struct termios oldtio,newtio;
-    char buf[255];
 
-    /*Comment to use virtual ports
-    if ( (argc < 2) ||
-         ((strcmp("/dev/ttyS0", argv[1])!=0) &&
-          (strcmp("/dev/ttyS1", argv[1])!=0) )) {
-        printf("Usage:\tnserial SerialPort\n\tex: nserial /dev/ttyS1\n");
-        exit(1);
-    }
-    */
+    linkLayer connectionParameters;
+    connectionParameters.baudRate = BAUDRATE_DEFAULT;
+    connectionParameters.numTries = MAX_RETRANSMISSIONS_DEFAULT;
+    connectionParameters.timeOut = TIMEOUT_DEFAULT;
+    connectionParameters.role = RECEIVER;
+    memcpy(connectionParameters.serialPort, "/dev/pty4", 10);
 
-    /*
-    Open serial port device for reading and writing and not as controlling tty
-    because we don't want to get killed if linenoise sends CTRL-C.
-    */
+    r_llopen(connectionParameters);
 
+    unsigned char buffer[DATA_BUFFER_SIZE];
 
-    fd = open(argv[1], O_RDWR | O_NOCTTY );
-    if (fd < 0) { perror(argv[1]); exit(-1); }
+    r_llread(buffer);
 
-    if (tcgetattr(fd,&oldtio) == -1) { /* save current port settings */
-        perror("tcgetattr");
-        exit(-1);
-    }
+    r_llclose(connectionParameters, 0);
 
-    bzero(&newtio, sizeof(newtio));
-    newtio.c_cflag = BAUDRATE | CS8 | CLOCAL | CREAD;
-    newtio.c_iflag = IGNPAR;
-    newtio.c_oflag = 0;
-
-    newtio.c_lflag = 0;
-
-    newtio.c_cc[VTIME]    = 0;   /* inter-character timer unused */
-    newtio.c_cc[VMIN]     = 1;   /* blocking read until 5 chars received */
-
-
-    tcflush(fd, TCIOFLUSH);
-
-    if (tcsetattr(fd,TCSANOW,&newtio) == -1) {
-        perror("tcsetattr");
-        exit(-1);
-    }
-
-    printf("New termios structure set\n");
-
-    // Our code
-
-
-    initializeStateMachine();
-    handshake(fd);
-
-    int counter = 0;
-
-    while (1) {
-        char data_buffer [DATA_BUFFER_SIZE] ;
-        receive_data(fd, data_buffer);
-        counter++;
-        if (counter==6) {
-            break;
-        }
-    }
-
-    disconnect(fd);
-
-    sleep(1);
-    tcsetattr(fd,TCSANOW,&oldtio);
-    close(fd);
     return 0;
 }
 
-int llread(unsigned char * buffer){
+int r_llread(unsigned char * buffer){
 
-    int res = receive_data(fd, buffer);
+    int res = r_receive_data(fd, buffer);
 
     return res;
 
 }
 
-int llopen(linkLayer connectionParameters) {
+int r_llopen(linkLayer connectionParameters) {
 
     if (connectionParameters.role == TRANSMITTER) {
        return -1;
@@ -860,9 +806,9 @@ int llopen(linkLayer connectionParameters) {
     // Our code
 
 
-    initializeStateMachine();
+    r_initializeStateMachine();
 
-    int ret = handshake(fd);
+    int ret = r_handshake(fd);
 
     if (ret == 1) {
 
@@ -874,9 +820,9 @@ int llopen(linkLayer connectionParameters) {
 
 }
 
-int llclose(linkLayer connectionParameters, int showStatistics){
+int r_llclose(linkLayer connectionParameters, int showStatistics){
 
-    int res = disconnect(fd);
+    int res = r_disconnect(fd);
 
     //TODO Missing statistics
 
@@ -892,3 +838,4 @@ int llclose(linkLayer connectionParameters, int showStatistics){
     }
 
 }
+
