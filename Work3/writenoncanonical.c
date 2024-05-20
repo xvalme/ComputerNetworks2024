@@ -79,6 +79,7 @@ typedef struct linkLayer{
 #define TIMEOUT_DEFAULT 4
 #define _POSIX_SOURCE 1 /* POSIX compliant source */
 
+int time_out = TIMEOUT_DEFAULT
 int s_fd;
 
 int s_handshake(int s_fd) {
@@ -569,7 +570,7 @@ int s_send_msg(int s_fd, const char* msg) {
 
     // timeout
     struct timeval timeout;
-    timeout.tv_sec = TIMEOUT_DEFAULT;
+    timeout.tv_sec = time_out;
     timeout.tv_usec = 0;
     fd_set readfds;
     int ready;
@@ -745,36 +746,6 @@ int main(int argc, char** argv)
 
     s_disconnect(s_fd, s_ctrl);
 
-    // if (s_send_data(s_fd, data, strlen(data), 1) != 0) {
-    //     fprintf(stderr, "[ERR] Error in sending data\n");
-    //     exit(-1);
-    // }
-
-    // while (s_receive(s_fd) != 0) 
-    // {
-    //     fprintf(stderr, "[ERR] Error in receiving RR\n");
-    //     if (s_send_data(s_fd, data, strlen(data), 1) != 0) {
-    //         fprintf(stderr, "[ERR] Error in sending data\n");
-    //         exit(-1);
-    //     }
-    // }
-    // fprintf(stderr, "[INFO] Data sent successfully\n");
-
-
-    // char data2[] = "This is a second message.";
-    // if (s_send_data(s_fd, data2, strlen(data2), 0) != 0) {
-    //     fprintf(stderr, "[ERR] Error in sending data\n");
-    //     exit(-1);
-    // }
-
-    // while (s_receive(s_fd) != 0) 
-    // {
-    //     fprintf(stderr, "[ERR] Error in receiving RR\n");
-    //     if (s_send_data(s_fd, data2, strlen(data2), 0) != 0) {
-    //         fprintf(stderr, "[ERR] Error in sending data\n");
-    //         exit(-1);
-    //     }
-    // }
     fprintf(stderr, "[INFO] Data sent successfully\n");
 
     sleep(1);
@@ -815,8 +786,11 @@ int s_llopen(linkLayer connectionParameters) {
     /* set input mode (non-canonical, no echo,...) */
     newtio.c_lflag = 0;
 
-    newtio.c_cc[VTIME] = connectionParameters.timeOut;   /* inter-character timer unused */
+    newtio.c_cc[VTIME] = 0;   /* inter-character timer unused */
     newtio.c_cc[VMIN] = 5;   /* blocking read until 5 chars s_received */
+
+    /* set timeout */
+    time_out = connectionParameters.timeOut;
 
     tcflush(s_fd, TCIOFLUSH);
 
@@ -871,6 +845,7 @@ int s_llclose(linkLayer connectionParameters, int showStatistics) {
 
     if (showStatistics) {
         // show statistics
+        fprintf(stderr, "[INFO] Showing statistics, (comming soon...)\n");
     }
     
     return SUCCESS;
