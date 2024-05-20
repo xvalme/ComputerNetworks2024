@@ -568,7 +568,7 @@ int send_msg(int fd, const char* msg) {
 
     // timeout
     struct timeval timeout;
-    timeout.tv_sec = 3;
+    timeout.tv_sec = TIMEOUT_DEFAULT;
     timeout.tv_usec = 0;
     fd_set readfds;
     int ready;
@@ -848,7 +848,7 @@ int llopen(linkLayer connectionParameters) {
  */
 int llwrite(unsigned char * buffer, int length) {
     int number_of_bytes_written = send_msg(fd, buffer);
-    if (number_of_bytes_written(fd, buffer) <= 0) {
+    if (number_of_bytes_written <= 0) {
         fprintf(stderr, "[ERR] Error in sending data\n");
         return FAILURE;
     }
