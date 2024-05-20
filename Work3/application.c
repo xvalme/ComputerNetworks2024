@@ -736,35 +736,6 @@ int r_receive_data(int fd, char *data_buffer){
 
 }
 
-int main(int argc, char** argv)
-{
-
-    linkLayer connectionParameters;
-    connectionParameters.baudRate = BAUDRATE_DEFAULT;
-    connectionParameters.numTries = MAX_RETRANSMISSIONS_DEFAULT;
-    connectionParameters.timeOut = TIMEOUT_DEFAULT;
-    connectionParameters.role = RECEIVER;
-    memcpy(connectionParameters.serialPort, "/dev/pty4", 10);
-
-    r_llopen(connectionParameters);
-
-    unsigned char buffer[DATA_BUFFER_SIZE];
-
-    r_llread(buffer);
-
-    r_llclose(connectionParameters, 0);
-
-    return 0;
-}
-
-int r_llread(unsigned char * buffer){
-
-    int res = r_receive_data(fd, buffer);
-
-    return res;
-
-}
-
 int r_llopen(linkLayer connectionParameters) {
 
     if (connectionParameters.role == TRANSMITTER) {
@@ -839,3 +810,63 @@ int r_llclose(linkLayer connectionParameters, int showStatistics){
 
 }
 
+int s_llclose(linkLayer connectionParameters, int showStatistics){
+
+    
+
+}
+
+int s_llopen(linkLayer connectionParameters) {
+
+}
+
+int llopen(linkLayer connectionParameters) {
+    
+    if (connectionParameters.role == TRANSMITTER) {
+        return s_llopen(connectionParameters);
+    }
+    else {
+        return r_llopen(connectionParameters);
+    }
+    
+}
+
+int llclose (linkLayer connectionParameters, int showStatistics) {
+    
+    if (connectionParameters.role == TRANSMITTER) {
+        return s_llclose(connectionParameters, showStatistics);
+    }
+    else {
+        return r_llclose(connectionParameters, showStatistics);
+    }
+    
+}
+
+int llread(unsigned char * buffer){
+
+    int res = r_receive_data(fd, buffer);
+
+    return res;
+
+}
+
+int main(int argc, char** argv)
+{
+
+    linkLayer connectionParameters;
+    connectionParameters.baudRate = BAUDRATE_DEFAULT;
+    connectionParameters.numTries = MAX_RETRANSMISSIONS_DEFAULT;
+    connectionParameters.timeOut = TIMEOUT_DEFAULT;
+    connectionParameters.role = RECEIVER;
+    memcpy(connectionParameters.serialPort, "/dev/pty4", 10);
+
+    llopen(connectionParameters);
+
+    unsigned char buffer[DATA_BUFFER_SIZE];
+
+    llread(buffer);
+
+    llclose(connectionParameters, 0);
+
+    return 0;
+}
