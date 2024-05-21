@@ -79,7 +79,7 @@ typedef struct linkLayer{
 #define TIMEOUT_DEFAULT 4
 #define _POSIX_SOURCE 1 /* POSIX compliant source */
 
-int time_out = TIMEOUT_DEFAULT
+int time_out = TIMEOUT_DEFAULT;
 int s_fd;
 
 int s_handshake(int s_fd) {
@@ -285,10 +285,10 @@ int s_receive(int s_fd) {
 
     char current_ctrl = 0x80;
 
-    bool rr = false;
-    bool rej = false;
-    bool disc = false;
-    bool ua = false;
+    bool rr = FALSE;
+    bool rej = FALSE;
+    bool disc = FALSE;
+    bool ua = FALSE;
 
     int control_field;
 
@@ -344,34 +344,34 @@ int s_receive(int s_fd) {
                     control = control_rr_1;
                     control_field = control_rr_field;
                     ctrl_get = 1;
-                    rr = true;
+                    rr = TRUE;
                     state = C_RCV_State;
                 } else if (buf[0] == control_rr_0) {
                     control = control_rr_0;
                     ctrl_get = 0;
                     control_field = control_rr_field;
-                    rr = true;
+                    rr = TRUE;
                     state = C_RCV_State;
                 } else if (buf[0] == control_rej_1) {
                     control = control_rej_1;
                     ctrl_get = 1;
-                    rej = true;
+                    rej = TRUE;
                     control_field = control_rej_field;
                     state = C_RCV_State;
                 } else if (buf[0] == control_rej_0) {
                     control = control_rej_0;
                     ctrl_get = 0;
-                    rej = true;
+                    rej = TRUE;
                     control_field = control_rej_field;
                     state = C_RCV_State;
                 } else if (buf[0] == control_ua) {
                     control = control_ua;
-                    ua = true;
+                    ua = TRUE;
                     control_field = control_ua_field;
                     state = C_RCV_State;
                 } else if (buf[0] == control_disc) {
                     control = control_disc;
-                    disc = true;
+                    disc = TRUE;
                     control_field = control_disc_field;
                     state = C_RCV_State;
                 } else if (buf[0] == flag) {
@@ -834,7 +834,7 @@ int s_llwrite(unsigned char * buffer, int length) {
  * @brief 
  * 
  * @param connectionParameters  data link parameters stored in linkLayer structure
- * @param showStatistics true or false to show statistics collected by link layer for performance evaluation
+ * @param showStatistics TRUE or FALSE to show statistics collected by link layer for performance evaluation
  * @return int Positive value in case of failure/ error; Negative value in case of failure/ error
  */
 int s_llclose(linkLayer connectionParameters, int showStatistics) {
