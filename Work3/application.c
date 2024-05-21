@@ -730,42 +730,39 @@ int r_receive_data(int fd, char *data_buffer){
 
     int res;
 
-    printf( "--------------\n");
+    printf( ":--------------\n");
 
-    memset(data_buffer, 0, DATA_BUFFER_SIZE);
+    res = r_receive_data_packet_(fd, state_machine.current_ctrl, data_buffer);
 
+    if (res) {
+        //Answer back with RR packet
 
-    while(TRUE){
-        res = r_receive_data_packet_(fd, state_machine.current_ctrl, data_buffer);
-        if (res) {
-            //Answer back with RR packet
+        r_send_rr(fd, state_machine.current_ctrl);
 
-            r_send_rr(fd, state_machine.current_ctrl);
+        //Bytestuffing 
+        r_ByteStuffing(data_buffer, DATA_BUFFER_SIZE);
 
-            //Bytestuffing 
-            r_ByteStuffing(data_buffer, DATA_BUFFER_SIZE);
+        printf( "%s\n", data_buffer);
 
-            printf( "%s\n", data_buffer);
+        printf( "--------------\n");
 
-            printf( "--------------\n");
+        state_machine.current_ctrl = !state_machine.current_ctrl;
 
-            state_machine.current_ctrl = !state_machine.current_ctrl;
+        return res;
 
-            return res;
-
-        }
-
-        if (res == -2) {
-                r_disconnect(fd);
-            }
-        else {
-            // Asnwer back with REJ packet 
-
-            r_send_rej(fd, state_machine.current_ctrl);
-
-            return 1;
-        }
     }
+
+    if (res == -2) {
+            r_disconnect(fd);
+        }
+    else {
+        // Asnwer back with REJ packet 
+
+        r_send_rej(fd, state_machine.current_ctrl);
+
+        return 1;
+    }
+    
 
 }
 

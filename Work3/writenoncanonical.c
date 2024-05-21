@@ -19,13 +19,12 @@
 #define SUCCESS 1
 #define FAILURE -1
 
-
 volatile int s_STOP=FALSE;
 
 /* toggle the control bit value */
 #define TOGGLE_CTRL(var) ((var) == 0 ? (var) = 1 : ((var) = 0))
 
-#define DATA_BUFFER_SIZE 1024
+#define DATA_BUFFER_SIZE 64000
 #define DEBUG_ALL 1
 
 int s_ctrl = 0;
