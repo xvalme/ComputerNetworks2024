@@ -23,7 +23,7 @@ volatile int STOP=FALSE;
 #define TRANSMITTER 0
 #define RECEIVER 1
 
-#define MAX_PAYLOAD_SIZE 1000
+#define MAX_PAYLOAD_SIZE 100000
 #define DATA_BUFFER_SIZE (MAX_PAYLOAD_SIZE * 2 + 10) 
 
 //CONNECTION deafault values
@@ -271,13 +271,20 @@ int r_receive_data_packet_(int fd, int current_ctrl_int, char *data_buffer) {
     while (TRUE) {
 
         if (STOP == FALSE) {
+            
             if (current_ctrl_int == 0) {
                 current_ctrl = Ctrl_down;
             } else {
                 current_ctrl = Ctrl_up;
             }
 
+            printf("%d\n", buf);
             res = read(fd, buf, 1);   
+
+            if (res < 0) {
+                return -1;
+            }
+            
             buf[res] = 0;       
 
             if (DEBUG_ALL) printf("Received byte: %x\n", buf[0]);
@@ -286,9 +293,11 @@ int r_receive_data_packet_(int fd, int current_ctrl_int, char *data_buffer) {
                 STOP = TRUE;
                 continue;
             } 
+
         }
 
         if (STOP == TRUE) {
+
             switch (STATE) {
                 case 0:
                     if (DEBUG_ALL) printf("In STATE 0\n");
@@ -339,7 +348,7 @@ int r_receive_data_packet_(int fd, int current_ctrl_int, char *data_buffer) {
                     break;
 
                 case 3:
-                    if (DEBUG_ALL) printf("In STATE 3\n");
+                    if (DEBUG_ALL) printf("In STATE 3:");
                     
                     if (DEBUG_ALL) printf("|%x|%x|\n", buf[0], (temporary[1] ^ temporary[2]));
 
@@ -379,14 +388,17 @@ int r_receive_data_packet_(int fd, int current_ctrl_int, char *data_buffer) {
                         else{
                             if (DEBUG_ALL) printf("Resetting state machine.\n");
                             STATE = 0;
+                            
                             memset(temporary, 0, DATA_BUFFER_SIZE);
                             memset(data, 0, DATA_BUFFER_SIZE);
+                            memset(buf, 0, DATA_BUFFER_SIZE);
                             moving_xor = ' ';
                             number_bytes_received = 0;
+
+                            if (DEBUG_ALL) printf("State machine reseted.\n");
                             break;
                         }
                     }
-
 
                     data[number_bytes_received] = buf[0];
                     number_bytes_received++;
@@ -755,7 +767,7 @@ int r_receive_data(int fd, char *data_buffer){
     if (res == -2) {
             r_disconnect(fd);
         }
-    else {
+    if (res == -3) {
         // Asnwer back with REJ packet 
 
         r_send_rej(fd, state_machine.current_ctrl);
@@ -978,7 +990,7 @@ int s_handshake(int s_fd) {
     return 0;
 }
 
-int s_s_receive_data(int s_fd) {
+int s_receive_data(int s_fd) {
     const char flag = 0x5c;
 	const char address = 0x01;
 	const char control = 0x08;
@@ -1516,7 +1528,7 @@ int s_llopen(linkLayer connectionParameters) {
             exit(-1);
         }
     } else {
-        if (s_s_receive_data(s_fd) != 0) {
+        if (s_receive_data(s_fd) != 0) {
             printf( "[ERR] Error in receiving data\n");
             exit(-1);
         }
