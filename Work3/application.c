@@ -23,7 +23,7 @@ volatile int STOP=FALSE;
 #define TRANSMITTER 0
 #define RECEIVER 1
 
-#define MAX_PAYLOAD_SIZE 100000
+#define MAX_PAYLOAD_SIZE 1000
 #define DATA_BUFFER_SIZE (MAX_PAYLOAD_SIZE * 2 + 10) 
 
 //CONNECTION deafault values
@@ -77,6 +77,7 @@ enum ControlField{
 int fd;
 int s_ctrl = 0;
 volatile int s_STOP=FALSE;
+int number_of_tries = MAX_RETRANSMISSIONS_DEFAULT;
 
 
 struct termios oldtio,newtio;
@@ -84,35 +85,37 @@ struct termios s_oldtio,s_newtio;
 StateMachine state_machine;
 
 int r_ByteStuffing(char* str, int strlen) {
+    const int DATA_BUFFER_SIZE = 1000; // Assuming a maximum buffer size
 
-    char buffer [DATA_BUFFER_SIZE];
+    char buffer[DATA_BUFFER_SIZE];
     int counter = 0;
 
-    for (int i = 0;i++; i<strlen-1){
-
-        if ((str[i] == 0x1b) && (str[i+1] == 0x7c)) {
-            //Flag
-            buffer[counter] = 0x5c;
-            continue;
+    for (int i = 0; i < strlen - 1; i++) {
+        if ((str[i] == 0x1b) && (str[i + 1] == 0x7c)) {
+            // Flag
+            buffer[counter++] = 0x5c;
+            i++; // Skip the next character
+        } else if ((str[i] == 0x1b) && (str[i + 1] == 0x7d)) {
+            // Esc
+            buffer[counter++] = 0x1b;
+            i++; // Skip the next character
+        } else {
+            buffer[counter++] = str[i];
         }
-
-        if ((str[i] == 0x1b) && str[i+1] == 0x7D){
-            //Esc
-            buffer[counter] = 0x1b;
-            continue;
-        }
-
-        buffer[counter] = str[i];
-        counter++;
-
     }
 
-    buffer[counter] = "\0";
+    // Copy the last byte if it's not an escape character
+    if (str[strlen - 2] != 0x1b) {
+        buffer[counter++] = str[strlen - 1];
+    }
 
-    memcpy(str, buffer, counter);
+    // Null-terminate the buffer
+    buffer[counter] = '\0';
+
+    // Copy the modified buffer back to the input string
+    memcpy(str, buffer, counter + 1); // +1 to copy the null terminator
 
     return counter;
-
 }
 
 void r_initializeStateMachine() {
@@ -120,9 +123,9 @@ void r_initializeStateMachine() {
 }
 
 int r_handshake(int fd) {
-    char buf[6];
+    char buf[DATA_BUFFER_SIZE];
     int temporary_size = 6;
-    char temporary[temporary_size];
+    char temporary[DATA_BUFFER_SIZE];
     int res;
 
     char SET_correct [5] = {0x5c, 0x01, 0x08, 0, 0x5c};
@@ -278,7 +281,6 @@ int r_receive_data_packet_(int fd, int current_ctrl_int, char *data_buffer) {
                 current_ctrl = Ctrl_up;
             }
 
-            printf("%d\n", buf);
             res = read(fd, buf, 1);   
 
             if (res < 0) {
@@ -319,6 +321,7 @@ int r_receive_data_packet_(int fd, int current_ctrl_int, char *data_buffer) {
                     else {
                         STATE = 0;
                         memset(temporary, 0, DATA_BUFFER_SIZE);
+                        printf("XOR reseted\n");
                         moving_xor = ' ';
                     }
                     break;
@@ -343,6 +346,7 @@ int r_receive_data_packet_(int fd, int current_ctrl_int, char *data_buffer) {
                         STATE = 0;
                         memset(temporary, 0, DATA_BUFFER_SIZE);
                         moving_xor = ' ';
+                        printf("XOR reseted\n");
                         return -1;
                     }
                     break;
@@ -363,6 +367,8 @@ int r_receive_data_packet_(int fd, int current_ctrl_int, char *data_buffer) {
                         STATE = 0;
                         memset(temporary, 0, DATA_BUFFER_SIZE);
                         moving_xor = ' ';
+                        printf("XOR reseted\n");
+
                     }
                     break;
                 
@@ -377,7 +383,7 @@ int r_receive_data_packet_(int fd, int current_ctrl_int, char *data_buffer) {
                         if (moving_xor == temporary[4]) {
                             printf("[I] Received data correctly.\n");
                             number_bytes_received--;
-                            data[number_bytes_received] = '\0';
+                            
                             /*for (int i = 0; i < number_bytes_received; i++) {
                                 if (DEBUG_ALL) printf("%c", data[i]);
                             }
@@ -394,6 +400,8 @@ int r_receive_data_packet_(int fd, int current_ctrl_int, char *data_buffer) {
                             memset(buf, 0, DATA_BUFFER_SIZE);
                             moving_xor = ' ';
                             number_bytes_received = 0;
+                            printf("XOR reseted\n");
+                        
 
                             if (DEBUG_ALL) printf("State machine reseted.\n");
                             break;
@@ -494,9 +502,9 @@ int r_send_rej(int fd, int ctrl) {
 }
 
 int r_verify_if_ua_received(int fd){
-    char buf[6];
+    char buf[DATA_BUFFER_SIZE];
     int temporary_size = 6;
-    char temporary[temporary_size];
+    char temporary[DATA_BUFFER_SIZE];
     int res;
 
     char SET_correct [5] = {0x5c, 0x01, 0x06, 0, 0x5c};
@@ -605,7 +613,7 @@ int r_verify_if_ua_received(int fd){
 }
 
 int r_disconnect(int fd){
-    char buf[6];
+    char buf[DATA_BUFFER_SIZE];
     int temporary_size = 6;
     char temporary[temporary_size];
     int res;
@@ -999,7 +1007,7 @@ int s_receive_data(int s_fd) {
 	const char bcc1 = address^control;  
 	const char bcc1_ua = address^control_ua;
 
-    char buf[1];
+    char buf[DATA_BUFFER_SIZE];
     s_StateMachine state = Start_State;
     int consecutive_flags = 0;
     char s_received_data[DATA_BUFFER_SIZE];
@@ -1118,7 +1126,7 @@ int s_receive(int s_fd) {
 
     int ctrl_get = s_ctrl;
 
-    char buf[1];
+    char buf[DATA_BUFFER_SIZE];
     s_StateMachine state = Start_State;
     int consecutive_flags = 0;
     char s_received_data[DATA_BUFFER_SIZE];
@@ -1258,84 +1266,87 @@ int s_receive(int s_fd) {
     }
     return -1;
 }
-char* s_byte_stuffing(const char* data, int data_length) {
+
+int s_byte_stuffing(const char* data, int data_length, char* new_data, int max_length) {
     const char ESC = 0x1B;
-    const char flag = 0x5c;
-    char* new_data = (char*)malloc(sizeof(char) * (data_length * 2 + 1)); // Allocate memory for new_data
-
-    if (new_data == NULL) {
-        printf("Memory allocation failed");
-        exit(1); // Exit if memory allocation fails
-    }
-
-    int i = 0;
-    while (i <= data_length) { 
-        if (data[i] == flag) {
-            new_data[i] = ESC;
-            i++;
-            new_data[i] = 0x7C;
-        } else if (data[i] == ESC) {
-            new_data[i] = ESC;
-            i++;
-            new_data[i] = 0x7D;
-        }else {
-            new_data[i] = data[i];
-        }
-        i++;
-    }
-    new_data[i] = '\0'; // Null-terminate the new_data string
-    return new_data;
-}
-
-int s_send_data(int s_fd, const char* data, int data_length, int s_ctrl) {
-	char test_packet[data_length+6];
-    const char flag = 0x5c;
-    const char address = 0x01;
-    
-    char control;
-	if (s_ctrl){
-		control = 0xc0;
-		}
-    else {
-		control = 0x80;
-		}
-    
-    /* fill the packet */
-    test_packet[0] = flag;
-    test_packet[1] = address;
-    test_packet[2] = control;
-    test_packet[3] = address^control;
-
-    char *new_data = s_byte_stuffing(data, data_length);
+    const char FLAG = 0x5C;
 
     int j = 0;
-    while (new_data[j] != '\0') {
-        test_packet[j+4] = new_data[j];
-        j++;
+    for (int i = 0; i < data_length; i++) {
+        if (data[i] == FLAG) {
+            if (j + 2 > max_length) { // Check for two-byte space
+                printf("Buffer overflow in byte stuffing\n");
+                return -1; // Indicate error
+            }
+            new_data[j++] = ESC;
+            new_data[j++] = 0x7C;
+        } else if (data[i] == ESC) {
+            if (j + 2 > max_length) { // Check for two-byte space
+                printf("Buffer overflow in byte stuffing\n");
+                return -1; // Indicate error
+            }
+            new_data[j++] = ESC;
+            new_data[j++] = 0x7D;
+        } else {
+            if (j + 1 > max_length) { // Check for one-byte space
+                printf("Buffer overflow in byte stuffing\n");
+                return -1; // Indicate error
+            }
+            new_data[j++] = data[i];
+        }
+    }
+    
+    return j; // Return the length of the new_data
+}
+int s_send_data(int s_fd, const char* data, int data_length, int s_ctrl) {
+    char test_packet[DATA_BUFFER_SIZE + 10]; // Increased to account for byte-stuffing and headers
+    const char FLAG = 0x5C;
+    const char ADDRESS = 0x01;
+    
+    char control;
+    if (s_ctrl) {
+        control = 0xC0;
+    } else {
+        control = 0x80;
+    }
+    
+    /* Fill the packet */
+    test_packet[0] = FLAG;
+    test_packet[1] = ADDRESS;
+    test_packet[2] = control;
+    test_packet[3] = ADDRESS ^ control;
+
+    char new_data[DATA_BUFFER_SIZE];
+    int new_data_length = s_byte_stuffing(data, data_length, new_data, sizeof(new_data));
+    if (new_data_length < 0) {
+        return -1; // Indicate error in byte stuffing
     }
 
-    // for (int i = 0; i < data_length; i++) {
-    //     test_packet[i+4] = data[i];
-    // }
+    memcpy(test_packet + 4, new_data, new_data_length);
 
-    char bcc2 = ' ';
-    for (int i = 4; i < data_length+4; i++) {
+    char bcc2 = 0x00;
+    for (int i = 4; i < new_data_length + 4; i++) {
         bcc2 ^= test_packet[i];
     }
 
-    test_packet[data_length+4] = bcc2;
-    test_packet[data_length+5] = flag;
+    test_packet[new_data_length + 4] = bcc2;
+    test_packet[new_data_length + 5] = FLAG;
 
-    for (int i = 0; i < sizeof(test_packet); i++) {
-        if (DEBUG_ALL) printf( "%x ", test_packet[i]);
+    int packet_size = new_data_length + 6;
+
+    if (DEBUG_ALL) {
+        for (int i = 0; i < packet_size; i++) {
+            printf("%x ", test_packet[i]);
+        }
+        printf("\n");
     }
 
-    int res = write(s_fd,test_packet, sizeof(test_packet));
+    int res = write(s_fd, test_packet, packet_size);
     
-    if (res == sizeof(test_packet)) {
-        printf( "[INFO] Sent dummy data packet\n");
+    if (res == packet_size) {
+        printf("[INFO] Sent dummy data packet\n");
     } else {
-        printf( "[ERR] Error sending dummy data packet\n");
+        printf("[ERR] Error sending dummy data packet\n");
         return -1;
     }
 
@@ -1389,13 +1400,14 @@ int s_disconnect(int s_fd, int s_ctrl) {
     return SUCCESS;
 }
 
-int s_send_msg(int s_fd, const char* msg) {
+int s_send_msg(int s_fd, const char* msg, int len) {
     int retr;
 
     // timeout
     struct timeval timeout;
     timeout.tv_sec = time_out;
     timeout.tv_usec = 0;
+    int timeout_count = 0;
     fd_set readfds;
     int ready;
 
@@ -1410,17 +1422,23 @@ int s_send_msg(int s_fd, const char* msg) {
         {
         case Send0_State:
             printf( "[INFO] Sending data with s_ctrl %d\n", s_ctrl);
-            res = s_send_data(s_fd, msg, strlen(msg), s_ctrl);
+            res = s_send_data(s_fd, msg, len, s_ctrl);
             state = ACK0_State;
             break;
         case ACK0_State:
             FD_ZERO(&readfds);
             FD_SET(s_fd, &readfds);
             ready = select(s_fd+1, &readfds, NULL, NULL, &timeout);
+            if (timeout_count >= number_of_tries) {
+                printf( "[ERR] Timeout waiting for RR\n");
+                return -1;
+            }
+            
             if (ready == 0) {
                 printf( "[ERR] Timeout waiting for RR\n");
                 sleep(1);
                 state = Send0_State;
+                timeout_count++;
                 break;
             }
             if (ready == -1) {
@@ -1445,7 +1463,7 @@ int s_send_msg(int s_fd, const char* msg) {
 
         case Send1_State:
             printf( "[INFO] Sending data with s_ctrl %d\n", s_ctrl);
-            res = s_send_data(s_fd, msg, strlen(msg), s_ctrl);
+            res = s_send_data(s_fd, msg, len, s_ctrl);
             state = ACK1_State;
             break;
         case ACK1_State:
@@ -1510,10 +1528,11 @@ int s_llopen(linkLayer connectionParameters) {
     newtio.c_lflag = 0;
 
     newtio.c_cc[VTIME] = 0;   /* inter-character timer unused */
-    newtio.c_cc[VMIN] = 5;   /* blocking read until 5 chars s_received */
+    newtio.c_cc[VMIN] = 1;   /* blocking read until 5 chars s_received */
 
     /* set timeout */
     time_out = connectionParameters.timeOut;
+    number_of_tries = connectionParameters.numTries;
 
     tcflush(s_fd, TCIOFLUSH);
 
@@ -1545,7 +1564,7 @@ int s_llopen(linkLayer connectionParameters) {
  * @return int Number of written characters; Negative value in case of failure/ error
  */
 int llwrite(unsigned char * buffer, int length) {
-    int number_of_bytes_written = s_send_msg(s_fd, buffer);
+    int number_of_bytes_written = s_send_msg(s_fd, buffer, length);
     if (number_of_bytes_written <= 0) {
         printf( "[ERR] Error in sending data\n");
         return FAILURE;
