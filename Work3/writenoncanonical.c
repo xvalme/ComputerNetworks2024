@@ -79,8 +79,9 @@ typedef struct linkLayer{
 #define TIMEOUT_DEFAULT 4
 #define _POSIX_SOURCE 1 /* POSIX compliant source */
 
-int time_out = TIMEOUT_DEFAULT
+int time_out = TIMEOUT_DEFAULT;
 int s_fd;
+struct termios oldtio,newtio;
 
 int s_handshake(int s_fd) {
     fprintf(stderr, "[INFO] Initializing s_handshake \n");
@@ -767,8 +768,6 @@ int main(int argc, char** argv)
  * @return int 1: success; -1: failure/ error
  */
 int s_llopen(linkLayer connectionParameters) {
-    int s_fd;
-    struct termios oldtio,newtio;
 
     s_fd = open(connectionParameters.serialPort, O_RDWR | O_NOCTTY );
     if (s_fd < 0) { perror(connectionParameters.serialPort); exit(-1); }
@@ -847,6 +846,12 @@ int s_llclose(linkLayer connectionParameters, int showStatistics) {
         // show statistics
         fprintf(stderr, "[INFO] Showing statistics, (comming soon...)\n");
     }
+
+    if ( tcsetattr(s_fd,TCSANOW,&oldtio) == -1) {
+        perror("tcsetattr");
+        exit(-1);
+    }
+    close(s_fd);
     
     return SUCCESS;
 }
