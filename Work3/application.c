@@ -369,15 +369,15 @@ int r_receive_data_packet_(int fd, int current_ctrl_int, char *data_buffer) {
                             printf("[I] Received data correctly.\n");
                             number_bytes_received--;
                             data[number_bytes_received] = '\0';
-                            for (int i = 0; i < number_bytes_received; i++) {
+                            /*for (int i = 0; i < number_bytes_received; i++) {
                                 if (DEBUG_ALL) printf("%c", data[i]);
                             }
-                            if (DEBUG_ALL) printf("\n");
+                            if (DEBUG_ALL) printf("\n");*/
                             memcpy(data_buffer, data, number_bytes_received);
                             return number_bytes_received;
                         }
                         else{
-                            if (DEBUG_ALL) printf("Resetting state machine.");
+                            if (DEBUG_ALL) printf("Resetting state machine.\n");
                             STATE = 0;
                             memset(temporary, 0, DATA_BUFFER_SIZE);
                             memset(data, 0, DATA_BUFFER_SIZE);
