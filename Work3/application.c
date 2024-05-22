@@ -79,7 +79,6 @@ int s_ctrl = 0;
 volatile int s_STOP=FALSE;
 
 int number_of_retransmissions = MAX_RETRANSMISSIONS_DEFAULT;
-
 struct termios oldtio,newtio;
 struct termios s_oldtio,s_newtio;
 StateMachine state_machine;
@@ -1339,6 +1338,7 @@ int s_send_data(int s_fd, const char* data, int data_length, int s_ctrl) {
 
     return res;
 }
+
 int s_disconnect(int s_fd, int s_ctrl) {
 	char test_packet[5];
     const char flag = 0x5c;
@@ -1396,10 +1396,10 @@ int s_send_msg(int s_fd, const char* msg, int len) {
     timeout.tv_usec = 0;
     fd_set readfds;
     int ready;
-    int timeout_count = 0;
+
     int res = -1;
 
-
+    int timeout_count = 0;
     senderSM state = Send0_State;
     while (state != Stop_SM_State) {
         // printf( "[DEBUGGGG] State: %d, msg %s\n", state, msg);
@@ -1422,8 +1422,8 @@ int s_send_msg(int s_fd, const char* msg, int len) {
             if (ready == 0) {
                 printf( "[ERR] Timeout waiting for RR\n");
                 sleep(1);
-                state = Send0_State;
                 timeout_count++;
+                state = Send0_State;
                 break;
             }
             if (ready == -1) {
