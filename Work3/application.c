@@ -90,15 +90,17 @@ int r_ByteStuffing(char* str, int strlen) {
 
     for (int i = 0;i++; i<strlen-1){
 
-        if ((str[i] == 0x1b) && (str[i+1] == 0x7c)) {
+        if ((str[i] == 0x5c) && (str[i+1] == 0x7c)) {
             //Flag
             buffer[counter] = 0x5c;
+            counter++;
             continue;
         }
 
-        if ((str[i] == 0x1b) && str[i+1] == 0x7D){
+        if ((str[i] == 0x5d) && str[i+1] == 0x7D){
             //Esc
-            buffer[counter] = 0x1b;
+            buffer[counter] = 0x5d;
+            counter++;
             continue;
         }
 
@@ -1256,7 +1258,7 @@ int s_receive(int s_fd) {
     return -1;
 }
 char* s_byte_stuffing(const char* data, int data_length) {
-    const char ESC = 0x1B;
+    const char ESC = 0x5D;
     const char flag = 0x5c;
     char* new_data = (char*)malloc(sizeof(char) * (data_length * 2 + 1)); // Allocate memory for new_data
 
@@ -1316,8 +1318,8 @@ int s_send_data(int s_fd, const char* data, int data_length, int s_ctrl) {
     // }
 
     char bcc2 = ' ';
-    for (int i = 4; i < data_length+4; i++) {
-        bcc2 ^= test_packet[i];
+    for (int i = 0; i < data_length; i++) {
+        bcc2 ^= new_data[i];
     }
 
     test_packet[data_length+4] = bcc2;
