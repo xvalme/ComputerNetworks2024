@@ -23,7 +23,7 @@ volatile int STOP=FALSE;
 #define TRANSMITTER 0
 #define RECEIVER 1
 
-#define MAX_PAYLOAD_SIZE 100000
+#define MAX_PAYLOAD_SIZE 1000
 #define DATA_BUFFER_SIZE (MAX_PAYLOAD_SIZE * 2 + 10) 
 
 //CONNECTION deafault values
@@ -84,23 +84,27 @@ struct termios s_oldtio,s_newtio;
 StateMachine state_machine;
 
 int r_ByteStuffing(char* str, int strlen) {
-
-    char buffer [DATA_BUFFER_SIZE];
+    char buffer[DATA_BUFFER_SIZE*2];
+    memset(buffer, 0, DATA_BUFFER_SIZE);
     int counter = 0;
 
-    for (int i = 0;i++; i<strlen-1){
+   for (int i = 0; i < strlen; i++){
 
-        if ((str[i] == 0x5c) && (str[i+1] == 0x7c)) {
+      //printf("Processing byte: %x\n", str[i]);
+
+        if ((str[i] == 0x5D) && (str[i+1] == 0x7C)) {
             //Flag
-            buffer[counter] = 0x5c;
-            counter++;
+            buffer[counter] = 0x5C;
+            counter++;  
+            i++;
             continue;
         }
 
-        if ((str[i] == 0x5d) && str[i+1] == 0x7D){
+        if ((str[i] == 0x5D) && str[i+1] == 0x7D){
             //Esc
-            buffer[counter] = 0x5d;
+            buffer[counter] = 0x5D;
             counter++;
+            i++;
             continue;
         }
 
@@ -109,10 +113,11 @@ int r_ByteStuffing(char* str, int strlen) {
 
     }
 
-    memcpy(str, buffer, counter);
+    // Copy the processed string back to the original string
+    memset(str, 0, strlen);
+    memcpy(str, buffer, counter-1);
 
-    return counter;
-
+    return counter-1;
 }
 
 void r_initializeStateMachine() {
@@ -251,9 +256,9 @@ int r_handshake(int fd) {
 int r_receive_data_packet_(int fd, int current_ctrl_int, char *data_buffer) {
 
     int res;
-    char buf[DATA_BUFFER_SIZE];
-    char temporary[DATA_BUFFER_SIZE];
-    char data[DATA_BUFFER_SIZE];
+    char buf[DATA_BUFFER_SIZE*2];
+    char temporary[DATA_BUFFER_SIZE*2];
+    char data[DATA_BUFFER_SIZE*2];
     int STATE = 0;
 
     char FLAG = 0x5c;
@@ -286,7 +291,8 @@ int r_receive_data_packet_(int fd, int current_ctrl_int, char *data_buffer) {
             
             buf[res] = 0;       
 
-            if (DEBUG_ALL) printf("Received byte: %x\n", buf[0]);
+            //if (DEBUG_ALL) printf("Received byte: %x\n", buf[0]);
+            //if (DEBUG_ALL) printf("Current sum: %d\n", number_bytes_received);
 
             if (res) {
                 STOP = TRUE;
@@ -317,7 +323,6 @@ int r_receive_data_packet_(int fd, int current_ctrl_int, char *data_buffer) {
                     }
                     else {
                         STATE = 0;
-                        memset(temporary, 0, DATA_BUFFER_SIZE);
                         moving_xor = ' ';
                     }
                     break;
@@ -340,7 +345,6 @@ int r_receive_data_packet_(int fd, int current_ctrl_int, char *data_buffer) {
                     }
                     else {
                         STATE = 0;
-                        memset(temporary, 0, DATA_BUFFER_SIZE);
                         moving_xor = ' ';
                         return -1;
                     }
@@ -360,13 +364,12 @@ int r_receive_data_packet_(int fd, int current_ctrl_int, char *data_buffer) {
                     }
                     else {
                         STATE = 0;
-                        memset(temporary, 0, DATA_BUFFER_SIZE);
                         moving_xor = ' ';
                     }
                     break;
                 
                 case 4:
-                    if (DEBUG_ALL) printf("In STATE 4 |Moving XOR: %x| Received %x\n", moving_xor, buf[0]);
+                    //if (DEBUG_ALL) printf("In STATE 4 |Moving XOR: %x| Received %x\n", moving_xor, buf[0]);
                     
                     if (buf[0] == FLAG) {
                         //Check if the last byte is the XOR of the previous bytes
@@ -375,13 +378,14 @@ int r_receive_data_packet_(int fd, int current_ctrl_int, char *data_buffer) {
 
                         if (moving_xor == temporary[4]) {
                             printf("[I] Received data correctly.\n");
-                            number_bytes_received--;
+                            //number_bytes_received--;
                             //data[number_bytes_received] = '\0';
                             /*for (int i = 0; i < number_bytes_received; i++) {
                                 if (DEBUG_ALL) printf("%c", data[i]);
                             }
                             if (DEBUG_ALL) printf("\n");*/
                             memcpy(data_buffer, data, number_bytes_received);
+                            printf("Received %d bytes.\n", number_bytes_received);
                             return number_bytes_received;
                         }
                         else{
@@ -751,15 +755,13 @@ int r_receive_data(int fd, char *data_buffer){
         r_send_rr(fd, state_machine.current_ctrl);
 
         //Bytestuffing 
-        r_ByteStuffing(data_buffer, DATA_BUFFER_SIZE);
-
-        printf( "%s\n", data_buffer);
+        int count = r_ByteStuffing(data_buffer, res);
 
         printf( "--------------\n");
 
         state_machine.current_ctrl = !state_machine.current_ctrl;
 
-        return res;
+        return count;
 
     }
 
@@ -893,7 +895,7 @@ int llread(unsigned char * buffer){
 
     llopen(connectionParameters);
 
-    unsigned char buffer[DATA_BUFFER_SIZE];
+    unsigned char buffer[DATA_BUFFER_SIZE*2];
 
     llread(buffer);
 
@@ -1001,7 +1003,7 @@ int s_receive_data(int s_fd) {
     char buf[1];
     s_StateMachine state = Start_State;
     int consecutive_flags = 0;
-    char s_received_data[DATA_BUFFER_SIZE];
+    char s_received_data[DATA_BUFFER_SIZE*2];
     int data_index = 0;
 
 	
@@ -1120,7 +1122,7 @@ int s_receive(int s_fd) {
     char buf[1];
     s_StateMachine state = Start_State;
     int consecutive_flags = 0;
-    char s_received_data[DATA_BUFFER_SIZE];
+    char s_received_data[DATA_BUFFER_SIZE*2];
     int data_index = 0;
 
     printf( "[INFO] Initializing receiving \n");
@@ -1257,37 +1259,54 @@ int s_receive(int s_fd) {
     }
     return -1;
 }
-char* s_byte_stuffing(const char* data, int data_length) {
+
+int s_ByteStuffing(const char* input, int input_length, char* output, int output_length) {
     const char ESC = 0x5D;
-    const char flag = 0x5c;
-    char* new_data = (char*)malloc(sizeof(char) * (data_length * 2 + 1)); // Allocate memory for new_data
+    const char FLAG = 0x5C;
+    int stuffed_length = 0;
 
-    if (new_data == NULL) {
-        printf("Memory allocation failed");
-        exit(1); // Exit if memory allocation fails
-    }
-
-    int i = 0;
-    while (i <= data_length) { 
-        if (data[i] == flag) {
-            new_data[i] = ESC;
-            i++;
-            new_data[i] = 0x7C;
-        } else if (data[i] == ESC) {
-            new_data[i] = ESC;
-            i++;
-            new_data[i] = 0x7D;
-        }else {
-            new_data[i] = data[i];
+    for (int i = 0; i < input_length; i++) {
+        if (input[i] == FLAG) {
+            if (stuffed_length + 2 > output_length) {
+                return -1; // Output buffer is too small
+            }
+            output[stuffed_length++] = ESC;
+            output[stuffed_length++] = FLAG ^ 0x20;
+        } else if (input[i] == ESC) {
+            if (stuffed_length + 2 > output_length) {
+                return -1; // Output buffer is too small
+            }
+            output[stuffed_length++] = ESC;
+            output[stuffed_length++] = ESC ^ 0x20;
+        } else {
+            if (stuffed_length + 1 > output_length) {
+                return -1; // Output buffer is too small
+            }
+            output[stuffed_length++] = input[i];
         }
-        i++;
     }
 
-    return new_data;
+    //Print everything
+    printf("Original data: ");
+    for (int i = 0; i < input_length; i++) {
+        if (DEBUG_ALL) printf( "%x ", input[i]);
+    }
+    printf( "\n"   );
+
+    printf( "[INFO] Stuffed data: ");
+    for (int i = 0; i < stuffed_length; i++) {
+        if (DEBUG_ALL) printf( "%x ", output[i]);
+    }
+
+    printf( "\n"   );
+    printf( "[INFO] Stuffed length: %d\n", stuffed_length);
+
+
+    return stuffed_length;
 }
 
 int s_send_data(int s_fd, const char* data, int data_length, int s_ctrl) {
-	char test_packet[data_length+6];
+	char test_packet[DATA_BUFFER_SIZE*2*10+6];
     const char flag = 0x5c;
     const char address = 0x01;
     
@@ -1305,33 +1324,24 @@ int s_send_data(int s_fd, const char* data, int data_length, int s_ctrl) {
     test_packet[2] = control;
     test_packet[3] = address^control;
 
-    char *new_data = s_byte_stuffing(data, data_length);
+    char new_data[DATA_BUFFER_SIZE*2];
+    int new_data_length = s_ByteStuffing(data, data_length, new_data, DATA_BUFFER_SIZE);
 
-    int j = 0;
-    while (new_data[j] != '\0') {
-        test_packet[j+4] = new_data[j];
-        j++;
-    }
-
-    // for (int i = 0; i < data_length; i++) {
-    //     test_packet[i+4] = data[i];
-    // }
+    memcpy(test_packet+4, new_data, new_data_length);
 
     char bcc2 = ' ';
-    for (int i = 0; i < data_length; i++) {
+    for (int i = 0; i < new_data_length; i++) {
         bcc2 ^= new_data[i];
+        printf( "%x ", bcc2);
     }
+    printf( "\n");
 
-    test_packet[data_length+4] = bcc2;
-    test_packet[data_length+5] = flag;
+    test_packet[new_data_length+4] = bcc2;
+    test_packet[new_data_length+5] = flag;
 
-    for (int i = 0; i < sizeof(test_packet); i++) {
-        if (DEBUG_ALL) printf( "%x ", test_packet[i]);
-    }
-
-    int res = write(s_fd,test_packet, sizeof(test_packet));
+    int res = write(s_fd,test_packet, new_data_length+6);
     
-    if (res == sizeof(test_packet)) {
+    if (res == new_data_length+6) {
         printf( "[INFO] Sent dummy data packet\n");
     } else {
         printf( "[ERR] Error sending dummy data packet\n");
