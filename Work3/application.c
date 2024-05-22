@@ -78,6 +78,7 @@ int fd;
 int s_ctrl = 0;
 volatile int s_STOP=FALSE;
 
+int number_of_retransmissions = MAX_RETRANSMISSIONS_DEFAULT;
 
 struct termios oldtio,newtio;
 struct termios s_oldtio,s_newtio;
@@ -1395,7 +1396,7 @@ int s_send_msg(int s_fd, const char* msg, int len) {
     timeout.tv_usec = 0;
     fd_set readfds;
     int ready;
-
+    int timeout_count = 0;
     int res = -1;
 
 
@@ -1414,10 +1415,15 @@ int s_send_msg(int s_fd, const char* msg, int len) {
             FD_ZERO(&readfds);
             FD_SET(s_fd, &readfds);
             ready = select(s_fd+1, &readfds, NULL, NULL, &timeout);
+            if (timeout_count == number_of_retransmissions) {
+                printf( "[ERR] Timeout waiting for RR\n");
+                return -1;
+            }
             if (ready == 0) {
                 printf( "[ERR] Timeout waiting for RR\n");
                 sleep(1);
                 state = Send0_State;
+                timeout_count++;
                 break;
             }
             if (ready == -1) {
@@ -1511,6 +1517,7 @@ int s_llopen(linkLayer connectionParameters) {
 
     /* set timeout */
     time_out = connectionParameters.timeOut;
+    number_of_retransmissions = connectionParameters.numTries;
 
     tcflush(s_fd, TCIOFLUSH);
 
