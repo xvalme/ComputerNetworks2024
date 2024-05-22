@@ -84,8 +84,8 @@ struct termios s_oldtio,s_newtio;
 StateMachine state_machine;
 
 int r_ByteStuffing(char* str, int strlen) {
-    char buffer[DATA_BUFFER_SIZE*2];
-    memset(buffer, 0, DATA_BUFFER_SIZE);
+    char buffer[DATA_BUFFER_SIZE*10];
+    memset(buffer, 0, DATA_BUFFER_SIZE*10);
     int counter = 0;
 
    for (int i = 0; i < strlen; i++){
@@ -114,7 +114,6 @@ int r_ByteStuffing(char* str, int strlen) {
     }
 
     // Copy the processed string back to the original string
-    memset(str, 0, strlen);
     memcpy(str, buffer, counter-1);
 
     return counter-1;
@@ -255,6 +254,7 @@ int r_handshake(int fd) {
 
 int r_receive_data_packet_(int fd, int current_ctrl_int, char *data_buffer) {
 
+    int toggle = 0;
     int res;
     char buf[DATA_BUFFER_SIZE*2];
     char temporary[DATA_BUFFER_SIZE*2];
@@ -292,7 +292,7 @@ int r_receive_data_packet_(int fd, int current_ctrl_int, char *data_buffer) {
             buf[res] = 0;       
 
             //if (DEBUG_ALL) printf("Received byte: %x\n", buf[0]);
-            //if (DEBUG_ALL) printf("Current sum: %d\n", number_bytes_received);
+            if (DEBUG_ALL) printf("Current sum: %d\n", number_bytes_received);
 
             if (res) {
                 STOP = TRUE;
@@ -369,14 +369,14 @@ int r_receive_data_packet_(int fd, int current_ctrl_int, char *data_buffer) {
                     break;
                 
                 case 4:
-                    //if (DEBUG_ALL) printf("In STATE 4 |Moving XOR: %x| Received %x\n", moving_xor, buf[0]);
+                    if (DEBUG_ALL) printf("In STATE 4 |Moving XOR: %x| Received %x | Saved i ntemporary: %x\n", moving_xor, buf[0], temporary[4]);
                     
                     if (buf[0] == FLAG) {
                         //Check if the last byte is the XOR of the previous bytes
 
                         if (DEBUG_ALL) printf("Received FLAG\n");
 
-                        if (moving_xor == temporary[4]) {
+                        if (toggle==1) {
                             printf("[I] Received data correctly.\n");
                             //number_bytes_received--;
                             //data[number_bytes_received] = '\0';
@@ -410,9 +410,14 @@ int r_receive_data_packet_(int fd, int current_ctrl_int, char *data_buffer) {
                     }
                     else {
                         if (DEBUG_ALL) printf( "Ready to receive flag\n");
+                        moving_xor = data[number_bytes_received-1] ^ moving_xor;
+
                         temporary[4] = buf[0];
+                        toggle = 1;
                         break;
                     }
+
+                    toggle = 0;
 
                     moving_xor = data[number_bytes_received-1] ^ moving_xor;
 
@@ -757,7 +762,7 @@ int r_receive_data(int fd, char *data_buffer){
         //Bytestuffing 
         int count = r_ByteStuffing(data_buffer, res);
 
-        printf( "--------------\n");
+        printf( "--------------After destuffing: %d\n", count);
 
         state_machine.current_ctrl = !state_machine.current_ctrl;
 
