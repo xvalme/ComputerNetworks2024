@@ -34,6 +34,8 @@ volatile int STOP=FALSE;
 
 #define TOGGLE_CTRL(var) ((var) == 0 ? (var) = 1 : ((var) = 0))
 
+int number_of_tries = MAX_RETRANSMISSIONS_DEFAULT;
+
 typedef struct {
     int current_ctrl;
 } StateMachine;
@@ -77,7 +79,6 @@ enum ControlField{
 int fd;
 int s_ctrl = 0;
 volatile int s_STOP=FALSE;
-int number_of_tries = MAX_RETRANSMISSIONS_DEFAULT;
 
 
 struct termios oldtio,newtio;
@@ -85,36 +86,24 @@ struct termios s_oldtio,s_newtio;
 StateMachine state_machine;
 
 int r_ByteStuffing(char* str, int strlen) {
-    const int DATA_BUFFER_SIZE = 1000; // Assuming a maximum buffer size
-
     char buffer[DATA_BUFFER_SIZE];
     int counter = 0;
 
-    for (int i = 0; i < strlen - 1; i++) {
-        if ((str[i] == 0x1b) && (str[i + 1] == 0x7c)) {
+    for (int i = 0; i < strlen; i++) {
+        if ((str[i] == 0x1b) && (str[i+1] == 0x7c)) {
             // Flag
             buffer[counter++] = 0x5c;
-            i++; // Skip the next character
-        } else if ((str[i] == 0x1b) && (str[i + 1] == 0x7d)) {
+            i++;  // Skip next character
+        } else if ((str[i] == 0x1b) && (str[i+1] == 0x7d)) {
             // Esc
             buffer[counter++] = 0x1b;
-            i++; // Skip the next character
+            i++;  // Skip next character
         } else {
             buffer[counter++] = str[i];
         }
     }
 
-    // Copy the last byte if it's not an escape character
-    if (str[strlen - 2] != 0x1b) {
-        buffer[counter++] = str[strlen - 1];
-    }
-
-    // Null-terminate the buffer
-    buffer[counter] = '\0';
-
-    // Copy the modified buffer back to the input string
-    memcpy(str, buffer, counter + 1); // +1 to copy the null terminator
-
+    memcpy(str, buffer, counter);
     return counter;
 }
 
@@ -123,9 +112,9 @@ void r_initializeStateMachine() {
 }
 
 int r_handshake(int fd) {
-    char buf[DATA_BUFFER_SIZE];
+    char buf[6];
     int temporary_size = 6;
-    char temporary[DATA_BUFFER_SIZE];
+    char temporary[temporary_size];
     int res;
 
     char SET_correct [5] = {0x5c, 0x01, 0x08, 0, 0x5c};
@@ -252,54 +241,46 @@ int r_handshake(int fd) {
 }
 
 int r_receive_data_packet_(int fd, int current_ctrl_int, char *data_buffer) {
-
     int res;
     char buf[DATA_BUFFER_SIZE];
     char temporary[DATA_BUFFER_SIZE];
     char data[DATA_BUFFER_SIZE];
     int STATE = 0;
+    int STOP = FALSE;
+    int number_bytes_received = 0;
+    char moving_xor = ' ';
 
     char FLAG = 0x5c;
     char Add_S = 0x01;
     char Add_R = 0x03;
-    
     char Ctrl_up = 0xc0;
     char Ctrl_down = 0x80;
 
     char current_ctrl;
-    
-    int number_bytes_received = 0;
-    char moving_xor = ' ';
 
     while (TRUE) {
-
         if (STOP == FALSE) {
-            
             if (current_ctrl_int == 0) {
                 current_ctrl = Ctrl_down;
             } else {
                 current_ctrl = Ctrl_up;
             }
 
-            res = read(fd, buf, 1);   
+            res = read(fd, buf, 1);
 
             if (res < 0) {
                 return -1;
             }
-            
-            buf[res] = 0;       
 
             if (DEBUG_ALL) printf("Received byte: %x\n", buf[0]);
 
             if (res) {
                 STOP = TRUE;
                 continue;
-            } 
-
+            }
         }
 
         if (STOP == TRUE) {
-
             switch (STATE) {
                 case 0:
                     if (DEBUG_ALL) printf("In STATE 0\n");
@@ -314,96 +295,73 @@ int r_receive_data_packet_(int fd, int current_ctrl_int, char *data_buffer) {
                     if (buf[0] == Add_S) {
                         STATE = 2;
                         temporary[1] = buf[0];
-                    }
-                    else if (buf[0] == FLAG) {
+                    } else if (buf[0] == FLAG) {
                         STATE = 1;
-                    }
-                    else {
+                    } else {
                         STATE = 0;
                         memset(temporary, 0, DATA_BUFFER_SIZE);
-                        printf("XOR reseted\n");
                         moving_xor = ' ';
                     }
                     break;
 
                 case 2:
                     if (DEBUG_ALL) printf("In STATE 2\n");
-                    if (DEBUG_ALL) printf( "Current ctrl: %x and received ctrl: %x\n", current_ctrl, buf[0]);
-                    if (buf[0] == 0b00001010){
-                        //DISC packet
+                    if (DEBUG_ALL) printf("Current ctrl: %x and received ctrl: %x\n", current_ctrl, buf[0]);
+                    if (buf[0] == 0b00001010) {
+                        // DISC packet
                         STATE = 10;
                         break;
                     }
-                    
+
                     if (buf[0] == current_ctrl) {
                         STATE = 3;
                         temporary[2] = buf[0];
-                    }
-                    else if (buf[0] == Add_S) {
+                    } else if (buf[0] == Add_S) {
                         STATE = 2;
-                    }
-                    else {
+                    } else {
                         STATE = 0;
                         memset(temporary, 0, DATA_BUFFER_SIZE);
                         moving_xor = ' ';
-                        printf("XOR reseted\n");
                         return -1;
                     }
                     break;
 
                 case 3:
                     if (DEBUG_ALL) printf("In STATE 3:");
-                    
                     if (DEBUG_ALL) printf("|%x|%x|\n", buf[0], (temporary[1] ^ temporary[2]));
 
                     if (buf[0] == (temporary[1] ^ temporary[2])) {
                         STATE = 4;
                         temporary[3] = buf[0];
-                    }
-                    else if (buf[0] == current_ctrl) {
+                    } else if (buf[0] == current_ctrl) {
                         STATE = 3;
-                    }
-                    else {
+                    } else {
                         STATE = 0;
                         memset(temporary, 0, DATA_BUFFER_SIZE);
                         moving_xor = ' ';
-                        printf("XOR reseted\n");
-
                     }
                     break;
-                
+
                 case 4:
                     if (DEBUG_ALL) printf("In STATE 4 |Moving XOR: %x| Received %x\n", moving_xor, buf[0]);
-                    
                     if (buf[0] == FLAG) {
-                        //Check if the last byte is the XOR of the previous bytes
-
+                        // Check if the last byte is the XOR of the previous bytes
                         if (DEBUG_ALL) printf("Received FLAG\n");
 
                         if (moving_xor == temporary[4]) {
                             printf("[I] Received data correctly.\n");
                             number_bytes_received--;
-                            
-                            /*for (int i = 0; i < number_bytes_received; i++) {
-                                if (DEBUG_ALL) printf("%c", data[i]);
-                            }
-                            if (DEBUG_ALL) printf("\n");*/
                             memcpy(data_buffer, data, number_bytes_received);
                             return number_bytes_received;
-                        }
-                        else{
+                        } else {
                             if (DEBUG_ALL) printf("Resetting state machine.\n");
                             STATE = 0;
-                            
                             memset(temporary, 0, DATA_BUFFER_SIZE);
                             memset(data, 0, DATA_BUFFER_SIZE);
                             memset(buf, 0, DATA_BUFFER_SIZE);
                             moving_xor = ' ';
                             number_bytes_received = 0;
-                            printf("XOR reseted\n");
-                        
-
-                            if (DEBUG_ALL) printf("State machine reseted.\n");
+                            if (DEBUG_ALL) printf("State machine resetted.\n");
                             break;
                         }
                     }
@@ -412,47 +370,36 @@ int r_receive_data_packet_(int fd, int current_ctrl_int, char *data_buffer) {
                     number_bytes_received++;
 
                     if (buf[0] != moving_xor) {
-                    }
-                    else {
-                        if (DEBUG_ALL) printf( "Ready to receive flag\n");
+                    } else {
+                        if (DEBUG_ALL) printf("Ready to receive flag\n");
                         temporary[4] = buf[0];
                         break;
                     }
 
-                    moving_xor = data[number_bytes_received-1] ^ moving_xor;
-
+                    moving_xor = data[number_bytes_received - 1] ^ moving_xor;
                     break;
 
                 case 10:
-
-                    if (buf[0] == temporary[1]^temporary[2]) {
+                    if (buf[0] == (temporary[1] ^ temporary[2])) {
                         STATE = 11;
-                    }
-
-                    else {
+                    } else {
                         STATE = 0;
                         memset(temporary, 0, DATA_BUFFER_SIZE);
                     }
-
                     break;
 
                 case 11:
-
                     if (buf[0] == FLAG) {
                         return -2;
-                    }
-
-                    else {
+                    } else {
                         STATE = 0;
                         break;
                     }
-
             }
             STOP = FALSE;
         }
     }
 }
-
 int r_send_rr(int fd, int ctrl){
     char rr [5] = {0x5c, 0x03, 0, 0, 0x5c};
 
@@ -502,9 +449,9 @@ int r_send_rej(int fd, int ctrl) {
 }
 
 int r_verify_if_ua_received(int fd){
-    char buf[DATA_BUFFER_SIZE];
+    char buf[6];
     int temporary_size = 6;
-    char temporary[DATA_BUFFER_SIZE];
+    char temporary[temporary_size];
     int res;
 
     char SET_correct [5] = {0x5c, 0x01, 0x06, 0, 0x5c};
@@ -613,7 +560,7 @@ int r_verify_if_ua_received(int fd){
 }
 
 int r_disconnect(int fd){
-    char buf[DATA_BUFFER_SIZE];
+    char buf[6];
     int temporary_size = 6;
     char temporary[temporary_size];
     int res;
@@ -760,7 +707,7 @@ int r_receive_data(int fd, char *data_buffer){
         r_send_rr(fd, state_machine.current_ctrl);
 
         //Bytestuffing 
-        r_ByteStuffing(data_buffer, DATA_BUFFER_SIZE);
+        r_ByteStuffing(data_buffer, res);
 
         printf( "%s\n", data_buffer);
 
@@ -890,27 +837,6 @@ int llread(unsigned char * buffer){
 
 }
 
-/*int main(int argc, char** argv)
-{
-
-    linkLayer connectionParameters;
-    connectionParameters.baudRate = BAUDRATE_DEFAULT;
-    connectionParameters.numTries = MAX_RETRANSMISSIONS_DEFAULT;
-    connectionParameters.timeOut = TIMEOUT_DEFAULT;
-    connectionParameters.role = RECEIVER;
-    memcpy(connectionParameters.serialPort, "/dev/pty4", 10);
-
-    llopen(connectionParameters);
-
-    unsigned char buffer[DATA_BUFFER_SIZE];
-
-    llread(buffer);
-
-    llclose(connectionParameters, 0);
-
-    return 0;
-}*/
-
 int time_out = TIMEOUT_DEFAULT;
 int s_fd;
 
@@ -1007,7 +933,7 @@ int s_receive_data(int s_fd) {
 	const char bcc1 = address^control;  
 	const char bcc1_ua = address^control_ua;
 
-    char buf[DATA_BUFFER_SIZE];
+    char buf[1];
     s_StateMachine state = Start_State;
     int consecutive_flags = 0;
     char s_received_data[DATA_BUFFER_SIZE];
@@ -1126,7 +1052,7 @@ int s_receive(int s_fd) {
 
     int ctrl_get = s_ctrl;
 
-    char buf[DATA_BUFFER_SIZE];
+    char buf[1];
     s_StateMachine state = Start_State;
     int consecutive_flags = 0;
     char s_received_data[DATA_BUFFER_SIZE];
@@ -1268,25 +1194,17 @@ int s_receive(int s_fd) {
 }
 
 int s_byte_stuffing(const char* data, int data_length, char* new_data, int max_length) {
-    const char ESC = 0x1B;
-    const char FLAG = 0x5C;
-
+    const unsigned char ESC = 0x1B;
+    const unsigned char FLAG = 0x5C;
     int j = 0;
     for (int i = 0; i < data_length; i++) {
-        if (data[i] == FLAG) {
+        if (data[i] == FLAG || data[i] == ESC) {
             if (j + 2 > max_length) { // Check for two-byte space
                 printf("Buffer overflow in byte stuffing\n");
                 return -1; // Indicate error
             }
             new_data[j++] = ESC;
-            new_data[j++] = 0x7C;
-        } else if (data[i] == ESC) {
-            if (j + 2 > max_length) { // Check for two-byte space
-                printf("Buffer overflow in byte stuffing\n");
-                return -1; // Indicate error
-            }
-            new_data[j++] = ESC;
-            new_data[j++] = 0x7D;
+            new_data[j++] = data[i] ^ 0x20; // XOR with 0x20 for transparency
         } else {
             if (j + 1 > max_length) { // Check for one-byte space
                 printf("Buffer overflow in byte stuffing\n");
@@ -1295,42 +1213,37 @@ int s_byte_stuffing(const char* data, int data_length, char* new_data, int max_l
             new_data[j++] = data[i];
         }
     }
-    
-    return j; // Return the length of the new_data
+    return j; // Return the length of the stuffed data
 }
+
 int s_send_data(int s_fd, const char* data, int data_length, int s_ctrl) {
-    char test_packet[DATA_BUFFER_SIZE + 10]; // Increased to account for byte-stuffing and headers
-    const char FLAG = 0x5C;
-    const char ADDRESS = 0x01;
-    
-    char control;
-    if (s_ctrl) {
-        control = 0xC0;
-    } else {
-        control = 0x80;
-    }
-    
-    /* Fill the packet */
-    test_packet[0] = FLAG;
-    test_packet[1] = ADDRESS;
+    char test_packet[DATA_BUFFER_SIZE + 10];
+    const unsigned char flag = 0x5c;
+    const unsigned char address = 0x01;
+
+    char control = s_ctrl ? 0xc0 : 0x80;
+
+    /* fill the packet */
+    test_packet[0] = flag;
+    test_packet[1] = address;
     test_packet[2] = control;
-    test_packet[3] = ADDRESS ^ control;
+    test_packet[3] = address ^ control;
 
     char new_data[DATA_BUFFER_SIZE];
-    int new_data_length = s_byte_stuffing(data, data_length, new_data, sizeof(new_data));
+    int new_data_length = s_byte_stuffing(data, data_length, new_data, DATA_BUFFER_SIZE);
     if (new_data_length < 0) {
         return -1; // Indicate error in byte stuffing
     }
 
     memcpy(test_packet + 4, new_data, new_data_length);
 
-    char bcc2 = 0x00;
+    char bcc2 = ' ';
     for (int i = 4; i < new_data_length + 4; i++) {
         bcc2 ^= test_packet[i];
     }
 
     test_packet[new_data_length + 4] = bcc2;
-    test_packet[new_data_length + 5] = FLAG;
+    test_packet[new_data_length + 5] = flag;
 
     int packet_size = new_data_length + 6;
 
@@ -1342,12 +1255,12 @@ int s_send_data(int s_fd, const char* data, int data_length, int s_ctrl) {
     }
 
     int res = write(s_fd, test_packet, packet_size);
-    
+
     if (res == packet_size) {
         printf("[INFO] Sent dummy data packet\n");
     } else {
         printf("[ERR] Error sending dummy data packet\n");
-        return -1;
+        return -1; // Indicate error in sending data
     }
 
     return res;
@@ -1407,10 +1320,9 @@ int s_send_msg(int s_fd, const char* msg, int len) {
     struct timeval timeout;
     timeout.tv_sec = time_out;
     timeout.tv_usec = 0;
-    int timeout_count = 0;
     fd_set readfds;
     int ready;
-
+    int timeout_count = 0;
     int res = -1;
 
 
@@ -1433,7 +1345,6 @@ int s_send_msg(int s_fd, const char* msg, int len) {
                 printf( "[ERR] Timeout waiting for RR\n");
                 return -1;
             }
-            
             if (ready == 0) {
                 printf( "[ERR] Timeout waiting for RR\n");
                 sleep(1);
